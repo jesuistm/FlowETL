@@ -29,6 +29,16 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8000"], allo
 flowetl_documentation = """
 # FlowETL Functions Framework Documentation
 
+## Supported Data Types
+
+Data types for the schema inference task: 
+
+- `Number` : Numerical values
+- `String` : Text or string values
+- `Date` : Temporal values
+- `Boolean` : Boolean values
+- `Complex` : List, Dictionaries
+
 ## Data Quality Nodes
 
 ### `MissingValues`
@@ -196,7 +206,11 @@ Container for the entire transformation pipeline.
   "plan_id": "unique_plan_id",
   "task_summary": "Detailed description",
   "source_dataset": "Source dataset name",
-  "source_schema" : the inferred schema for the source dataset
+  "source_schema" : {
+    "col1" : "column type", 
+    "col2" : "column type",
+    ...
+  },
   "pipeline": [
     {
       "node_id": "handle_missing_1",
@@ -235,6 +249,9 @@ Container for the entire transformation pipeline.
 system_prompt_template = """
 You are a data engineering expert tasked with creating transformation plans using the available FlowETL Functions.
 
+DATASET:
+{dataset}
+
 DOCUMENTATION:
 {documentation}
 
@@ -243,11 +260,12 @@ TASK DESCRIPTION:
 
 INSTRUCTIONS:
 1. Analyze the task description and knowledge base to understand the data transformation requirements
-2. Create a complete JSON transformation plan using FlowETL Functions
-3. Follow the node ordering rules from the documentation
-4. Use descriptive node IDs that clearly indicate their purpose
-5. Include all required fields in the JSON output
-6. Ensure the JSON is valid and follows the exact schema shown in the documentation
+2. Using the FlowETL supported data types, infer a plausible schema for the input dataset
+3. Create a complete JSON transformation plan using FlowETL Functions
+4. Follow the node ordering rules from the documentation
+5. Use descriptive node IDs that clearly indicate their purpose
+6. Include all required fields in the JSON output
+7. Ensure the JSON is valid and follows the exact schema shown in the documentation
 
 {format_instructions}
 
@@ -283,7 +301,12 @@ async def process_abstraction(request: FrontEndRequest) -> Dict[str, Any]:
         task_description = request.task_description
 
         # invoke the plan construction chain
-        result = chain.invoke({ "task_description": task_description, "documentation" : flowetl_documentation, "source_dataset" : source_dataset })
+        result = chain.invoke({ 
+            "task_description": task_description, 
+            "documentation" : flowetl_documentation, 
+            "source_dataset" : source_dataset,
+            "dataset" : abstraction
+        })
 
         return { "plan" : result }
 
