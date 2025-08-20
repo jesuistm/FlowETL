@@ -3,3 +3,7 @@ pandas
 fastapi[standard]
 uvicorn
 requests
+
+langchain
+langchain-openai
+langchain-community

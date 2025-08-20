@@ -68,20 +68,25 @@ def main():
     if trigger_btn:
 
         # abstract the input dataset to a pandas dataframe
-        abstraction = abstract_dataset(input_dataset).to_json()
+        abstraction = abstract_dataset(input_dataset)
+
+        # take a 25% sample of the abstraction - this makes processing quicker
+        # we assume that the plan generated will be successfully applied to the entire dataset
+        sampled_abstraction = abstraction.sample(frac=0.25).to_json()
 
         try:
             response = requests.post(
                 "http://localhost:8000/", 
                 json={
-                    "abstraction": abstraction, 
+                    "abstraction": sampled_abstraction, 
                     "task_description": task_description
                 }
             )
 
             response_body = response.json()
             if response.status_code == 200:
-                st.success(f"FlowETL found {response_body['abstraction_length']} objects/rows")
+                st.success("Plan generated but not validated")
+                st.json(response_body["plan"])
             else:
                 # FastAPI uses HTTPException by default, hence we assume an error returns the "detail" key
                 st.error(response_body.get("detail"))
