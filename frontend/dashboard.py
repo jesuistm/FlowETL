@@ -70,14 +70,19 @@ def main():
         # abstract the input dataset to a pandas dataframe
         abstraction = abstract_dataset(input_dataset)
 
-        # take a 25% sample of the abstraction - this makes processing quicker
+        # take the min between 10% sample of the abstraction or 25 rows - this makes processing quicker
         # we assume that the plan generated will be successfully applied to the entire dataset
-        sampled_abstraction = abstraction.sample(frac=0.25).to_json()
+        sample_size = min(25, int(len(abstraction) * 0.1)) 
+        sampled_abstraction = abstraction.sample(n=sample_size).to_json()
+
+        # extract the uploaded dataset name
+        dataset_name = input_dataset.name
 
         try:
             response = requests.post(
                 "http://localhost:8000/", 
                 json={
+                    "source_dataset" : dataset_name,
                     "abstraction": sampled_abstraction, 
                     "task_description": task_description
                 }

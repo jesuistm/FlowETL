@@ -186,6 +186,7 @@ Container for the entire transformation pipeline.
 - `plan_id`: Unique identifier for the plan
 - `task_description`: Detailed task description
 - `source_dataset`: Name of the source dataset targeted by the Plan
+- `source_schema`: Inferred schema for the source dataset
 - `pipeline`: Ordered list of DataTaskNode instances
 
 ## Serialization Format
@@ -195,6 +196,7 @@ Container for the entire transformation pipeline.
   "plan_id": "unique_plan_id",
   "task_summary": "Detailed description",
   "source_dataset": "Source dataset name",
+  "source_schema" : the inferred schema for the source dataset
   "pipeline": [
     {
       "node_id": "handle_missing_1",
@@ -249,7 +251,7 @@ INSTRUCTIONS:
 
 {format_instructions}
 
-Generate the transformation plan:
+Generate a transformation plan for the {source_dataset} dataset:
 """
 
 # setup OpenAI client
@@ -274,11 +276,14 @@ async def process_abstraction(request: FrontEndRequest) -> Dict[str, Any]:
         # reconstruct DataFrame from JSON
         abstraction = pd.DataFrame(json.loads(request.abstraction))
 
+        # extract the source dataset name 
+        source_dataset = request.source_dataset
+
         # extract task description from request payload
         task_description = request.task_description
 
         # invoke the plan construction chain
-        result = chain.invoke({ "task_description": task_description, "documentation" : flowetl_documentation })
+        result = chain.invoke({ "task_description": task_description, "documentation" : flowetl_documentation, "source_dataset" : source_dataset })
 
         return { "plan" : result }
 
