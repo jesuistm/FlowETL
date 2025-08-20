@@ -73,7 +73,10 @@ def main():
         try:
             response = requests.post(
                 "http://localhost:8000/", 
-                json={"abstraction": abstraction, "task_description": task_description}
+                json={
+                    "abstraction": abstraction, 
+                    "task_description": task_description
+                }
             )
 
             response_body = response.json()
