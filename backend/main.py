@@ -94,7 +94,7 @@ Detects and handles outliers and anomalies with column-specific strategies.
 ```
 {
   column_name: {
-    normal_values (optional): definition of normal values (see below),
+    normal_values (required): definition of normal values (see below),
     strategy (required): handling strategy,
     user_value (optional, depending on strategy): value for user-defined imputation
   }
@@ -106,6 +106,7 @@ Detects and handles outliers and anomalies with column-specific strategies.
 - **List**: Explicit list of acceptable values
 - **Range**: Min/max bounds for acceptable values
 - **Condition**: Boolean expression defining normal values
+- **Auto** : Automatically detect outliers in numerical columns
 
 **Strategies:**
 

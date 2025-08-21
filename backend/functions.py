@@ -316,7 +316,7 @@ def _detect_outliers(series: pd.Series, normal_values: Union[str, List, Dict], i
         
     elif isinstance(normal_values, str):
         # assume it's a condition string that can be evaluated
-        # this is more advanced and potentially unsafe - handle with care
+        # NOTE : this is more advanced and potentially unsafe - handle with care. Potential risk of prompt/code injection attacks
         try:
             # create a safe namespace for evaluation
             namespace = {'series': series, 'pd': pd, 'np': np}
