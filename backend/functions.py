@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Any, Dict
 
-def missing_values(columns : Dict[str, Any], abstraction, features_schema : Dict[str, str]):
+def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, features_schema : Dict[str, str]) -> pd.DataFrame:
     """
     Handle missing values following the configuration handles within the plan
     
@@ -127,3 +127,11 @@ def missing_values(columns : Dict[str, Any], abstraction, features_schema : Dict
 
     return abstraction
 
+
+def duplicate_instances(abstraction : pd.DataFrame) -> pd.DataFrame:
+    """
+    Removes duplicated rows from the abstraction, leveraging Pandas' built-in `drop_duplicates` method
+    **Parameters**
+    - `abstraction` : Pandas dataframe to be processed by this function
+    """
+    return abstraction.drop_duplicates()

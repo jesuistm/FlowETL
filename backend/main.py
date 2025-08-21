@@ -52,9 +52,9 @@ Detects and handles missing values with column-specific strategies.
 ```
 {
   column_name: {
-    detect: [list of values considered missing for this column],
-    strategy: handling strategy,
-    user_value: value for user-defined imputation
+    detect (optional): [list of values considered missing for this column],
+    strategy (required): handling strategy,
+    user_value (required, depending on strategy): value for user-defined imputation
   }
 }
 ```
@@ -278,9 +278,9 @@ output_parser = JsonOutputParser(pydantic_object=Plan)
 
 # define prompt structure
 prompt_template = PromptTemplate( 
-    template=system_prompt_template, 
-    input_variables=["task_description", "documentation"], 
-    partial_variables={"format_instructions": output_parser.get_format_instructions()} 
+  template=system_prompt_template, 
+  input_variables=["task_description", "documentation"], 
+  partial_variables={"format_instructions": output_parser.get_format_instructions()} 
 ) 
 
 # define LangChain chain to assemble the prompt, call the llm, and parse the output
