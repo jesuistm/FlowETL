@@ -7,3 +7,4 @@ numpy
 langchain
 langchain-openai
 langchain-community
+scikit-learn
