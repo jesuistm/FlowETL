@@ -3,15 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.pydantic_models import Plan, FrontEndRequest
 import pandas as pd
 import json
-from typing import Dict, Any
 import logging
 import os
 from dotenv import load_dotenv
-from typing import Dict, Any, List
+from typing import Dict, Any
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from pydantic import BaseModel, Field
 
 # set logging to DEBUG mode
 logging.basicConfig(level=logging.INFO)
@@ -64,7 +62,7 @@ Detects and handles missing values with column-specific strategies.
 **Strategies:**
 
 - `drop_row`: Remove rows containing missing values
-- `drop_column`: Remove column if threshold percentage of values are missing
+- `drop_column`: Remove column if the majority of values are missing
 - `impute_user`: Replace with user-provided value
 - `impute_auto`: Automatically impute based on inferred column type
 - `mean`: Fill with column mean (numeric columns only)
