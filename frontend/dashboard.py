@@ -137,6 +137,7 @@ def main():
                 response_body = response.json()
                 if response.status_code == 200:
                     st.success("We got a response!")
+                    st.json(response_body['plan'])
                 else:
                     # FastAPI uses HTTPException by default, hence we assume an error returns the "detail" key
                     st.error(response_body.get("detail"))

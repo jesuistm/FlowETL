@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from backend.pydantic_models import Plan, DataAnalystRequest, DataEngineerRequest
+from backend.pydantic_models import Plan, DataAnalystRequest, DataEngineerRequest, Analysis
 import pandas as pd
 import json
 import logging
@@ -311,7 +311,62 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
 
   except Exception as e:
     raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
-  
+
+
+
+
+# define intial prompt template to obtain both the analysis and plotting code snippets for the query
+data_analysis_system_prompt = """
+You are a Python data analyst generating executable code for pandas DataFrame queries.
+
+Environment: `pandas as pd`, `matplotlib.pyplot as plt`, `numpy as np` are available.
+Assumptions: Dataset is clean and analysis-ready. No data wrangling needed.
+
+**IMPORTANT**: Do not include any comments in the generated code.
+
+DATASET
+{dataset}
+
+QUERY
+{query}
+
+## TASK
+Generate two function types based on query:
+- **analysis_code**: `def analyze_data(df):` - processes data, returns structured results
+- **plot_code**: `def plot_data(df):` - creates matplotlib visualization (optional)
+
+## QUERY CLASSIFICATION
+- **Analysis only**: calculate, average, sum, count, filter, find, statistics, summary, top, bottom
+- **Visualization only**: chart, plot, graph, visualize, distribution, histogram, bar, line, scatter
+- **Both**: "analyze and show", "summarize with chart", queries requesting data + visualization
+
+## OUTPUT FORMAT
+{format_instructions}
+
+## REQUIREMENTS
+- Functions must take `df` parameter
+- Analysis returns structured data: dict with 'data', 'summary', 'count' keys
+- Round numbers to 2 decimal places
+- Plots include titles, axis labels, proper formatting
+- analysis_code returns meaningful data structures
+```
+
+Generate executable code for the given query.
+"""
+
+# define the output parser for the data analysis task
+data_analysis_output_parser = JsonOutputParser(pydantic_object=Analysis)
+
+# define the prompt builder for the data analysis task
+data_analysis_prompt_builder = PromptTemplate( 
+  template=data_analysis_system_prompt, 
+  input_variables=["dataset", "query"], 
+  partial_variables={"format_instructions": data_analysis_output_parser.get_format_instructions()} 
+) 
+
+# define the data analysis Langchain chain
+data_analysis_chain = data_analysis_prompt_builder | llm | data_analysis_output_parser
+
 @app.post("/analyze")
 def analyze_data(request : DataAnalystRequest) -> Dict[str, Any]:
   try:
@@ -319,58 +374,10 @@ def analyze_data(request : DataAnalystRequest) -> Dict[str, Any]:
     abstraction = pd.DataFrame(json.loads(request.abstraction))
     query = request.query
 
+    # invoke the plan construction chain
+    result = data_analysis_chain.invoke({ "query" : query, "dataset" : abstraction })
+    
+    return { "plan" : result }
+
   except Exception as e:
     raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
-
-
-
-# define intial prompt template to obtain both the analysis and plotting code snippets for the query
-data_analysis_system_prompt = """
-You are a Python data analyst generating executable code for pandas DataFrame queries.
-Assume the following are present in the execution environment: `pandas as pd`, `matplotlib.pyplot as plt`, `numpy as np`
-
-## TASK
-Generate code for two types of outputs:
-- analysis_code: Function `def analyze_data(df):` that processes data and returns structured results
-- plot_code: Matplotlib visualization code (optional)
-
-## QUERY CLASSIFICATION
-- Analysis: calculate, average, sum, count, filter, find, statistics, summary, top, bottom → Return dict/dataframe
-- Visualization: chart, plot, graph, visualize, distribution, histogram, bar, line, scatter → Create matplotlib plot
-- Both: "analyze and show", "summarize with chart" → Generate both codes
-
-## OUTPUT FORMAT
-```json
-{
-  "analysis_code": "def analyze_data(df):\n    # Process data, return dict/dataframe/value\n    return results",
-  "plot_code": "# Matplotlib code with labels and formatting\nplt.show()"
-}
-```
-
-## REQUIREMENTS
-- Analysis function must take `df` parameter and return results
-- Include error handling for empty data
-- Round numbers appropriately
-- Add meaningful titles/labels to plots
-- Return structured data (dict with keys like 'data', 'summary', 'count')
-
-## EXAMPLES 
-
-**"Average sales by region":**
-```json
-{
-  "analysis_code": "def analyze_data(df):\n    avg_sales = df.groupby('region')['sales'].mean().round(2)\n    return {\n        'data': avg_sales.to_dict(),\n        'highest': avg_sales.idxmax(),\n        'summary': f'Highest: {avg_sales.idxmax()} (${avg_sales.max():,.2f})'\n    }",
-  "plot_code": "avg_sales = df.groupby('region')['sales'].mean()\nplt.figure(figsize=(10,6))\navg_sales.plot(kind='bar')\nplt.title('Average Sales by Region')\nplt.ylabel('Sales ($)')\nplt.xticks(rotation=45)\nplt.tight_layout()\nplt.show()"
-}
-```
-
-**"Customers over 50":**
-```json
-{
-  "analysis_code": "def analyze_data(df):\n    filtered = df[df['age'] > 50]\n    return {\n        'data': filtered,\n        'count': len(filtered),\n        'percentage': round(len(filtered)/len(df)*100, 1),\n        'summary': f'{len(filtered)} customers over 50 ({round(len(filtered)/len(df)*100, 1)}%)'\n    }",
-  "plot_code": null
-}
-```
-
-Generate executable code for the given query.
-"""
