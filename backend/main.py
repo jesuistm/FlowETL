@@ -127,7 +127,7 @@ A versatile node for all column operations including creation, transformation, m
 
 - `source`: Single source column name (for split/transform/rename/drop operations) or list of source columns (for merge operations)
 - `target`: Single target column name (for create/transform/rename operations) or list of target columns (for split operations)
-- `function`: Pandas-compatible transformation code/expression
+- `function`: Pandas-compatible transformation lambda code/expression
 - `drop_source`: Boolean - whether to drop source column(s) after operation
 
 **Operation Types:**

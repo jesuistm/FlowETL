@@ -329,3 +329,115 @@ def _detect_outliers(series: pd.Series, normal_values: Union[str, List, Dict], i
     
     # default: no outliers detected
     return pd.Series(False, index=series.index)
+
+
+def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target : Union[str, List], function : str, drop_source : bool) -> pd.DataFrame:
+    """
+    Handle all column operations including creation, transformation, merging, splitting, renaming, and dropping.
+
+    **Parameters**
+    - `abstraction` : Pandas dataframe to be processed by this function
+    - `source`: Single source column name (for split/transform/rename/drop operations) or list of source columns (for merge operations)
+    - `target`: Single target column name (for create/transform/rename operations) or list of target columns (for split operations)
+    - `function`: Pandas-compatible transformation lambda code/expression
+    - `drop_source`: Boolean - whether to drop source column(s) after operation
+
+    **Operation Types:**
+
+    #### 1. Merge Columns
+    Combine multiple source columns into one new target column.
+    - Set: `source` (list), `target`, `function` (merging logic)
+    - Set: `drop_source=true` to remove source columns
+    
+    #### 2. Split Column
+    Split one source column into multiple target columns.
+    - Set: `source`, `target` (list), `function` (splitting logic)
+    - Set: `drop_source=true` to remove source column
+
+    #### 3. Create Column
+    Create new column from existing column(s), keeping the source.
+    - Set: `source`, `target`, `function`
+    - Set: `drop_source=false` to keep source columns
+
+    #### 4. Standardize/Transform Column
+    Apply transformation to column in-place.
+    - Set: `source`, `target` (same as source), `function`
+    - Set: `drop_source=false` to apply transformation in place
+
+    #### 5. Rename Column
+    Change column name without transformation.
+    - Set: `source`, `target`
+    - No `function` needed
+    - Set: `drop_source=false` to simply rename the column
+
+    #### 6. Drop Column
+    Remove column from dataset.
+    - Set: `source`, `drop_source=true`
+    - No `target` or `function` needed
+
+    **Function Examples:**
+    - Concatenation: `lambda row: row['col1'] + ' ' + row['col2']`
+    - Mathematical: `lambda x: x * 100`
+    - Conditional: `lambda x: 'High' if x > 100 else 'Low'`
+    - Date extraction: `lambda x: pd.to_datetime(x).year`
+    - Splitting: `lambda x: x.split(',')`
+    """
+    
+    # convert the function supplied to an executable 
+    if function:
+        # can now call runnable(params...)
+        runnable = eval(function)
+
+    # operation 1: merge columns
+    if isinstance(source, list) and isinstance(target, str):
+        # apply function row-wise for merging
+        abstraction[target] = abstraction.apply(runnable, axis=1)
+        if drop_source:
+            # drop source columns if specified
+            abstraction.drop(columns=source, inplace=True)
+        return abstraction
+
+    # operation 2 : split columns 
+    if isinstance(source, str) and isinstance(target, list):
+        # apply function and split result into multiple columns
+        split_data = abstraction[source].apply(runnable)
+        
+        # handle the split results
+        if hasattr(split_data.iloc[0], '__iter__') and not isinstance(split_data.iloc[0], str):
+            # if function returns iterable (like list from split)
+            split_df = pd.DataFrame(split_data.tolist(), index=abstraction.index)
+            # assign to target columns
+            for i, col_name in enumerate(target):
+                abstraction[col_name] = split_df.iloc[:, i] if i < split_df.shape[1] else None
+        else:
+            # if function doesn't return iterable, assign same value to all targets
+            for col_name in target:
+                abstraction[col_name] = split_data
+    
+        if drop_source:
+            abstraction.drop(columns=[source], inplace=True)
+        return abstraction
+
+    # operations 3 & 4 : create & transform columns 
+    if isinstance(source, str) and isinstance(target, str):
+        # check if we're dealing with multiple source columns referenced in the function
+        if '[' in str(function) and ']' in str(function):
+            # we check if square brackets appear in lambda - meaning it must access multiple columns
+            abstraction[target] = abstraction.apply(runnable, axis=1)
+        else:
+            # column-wise operation
+            abstraction[target] = abstraction[source].apply(runnable)
+        if drop_source and source != target:
+            # drop source if different from target and drop_source is True
+            abstraction.drop(columns=[source], inplace=True)
+        return abstraction
+    
+    # operation 5 : rename column 
+    if function is None and isinstance(source, str) and isinstance(target, str) and source != target:
+        abstraction.rename(columns={source: target}, inplace=True)
+        return abstraction
+    
+    # operation 6 : drop column 
+    if drop_source and (target is None and function is None):
+        abstraction.drop(source, inplace=True)
+        return abstraction
