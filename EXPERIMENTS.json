@@ -1,0 +1,1262 @@
+{
+  "amazon_reviews.json": {
+    "task": "Prepare and standardise the Amazon reviews dataset: ensure 'reviewTime' is consistently formatted as YYYY-MM-DD, and clean 'reviewerName' by trimming extra spaces. Verify the 'overall' rating column is numeric and within the valid range (1.0–5.0). Impute any missing ratings with the median and cap values outside the range at the boundaries. Remove duplicate reviews based on the same reviewerID, asin, and reviewTime combination. Keep all other fields unchanged.",
+    "plan": {
+      "id": "plan_amazon_reviews_prep_v1",
+      "task_summary": "Prepare and standardise the Amazon reviews dataset: ensure reviewTime is formatted as YYYY-MM-DD (derived from unixReviewTime), trim reviewerName, coerce overall to numeric, impute missing overall with median, cap overall to 1.0–5.0, and remove duplicate reviews. Keep all other fields unchanged.",
+      "source_dataset": "amazon_reviews.json",
+      "source_schema": {
+        "overall": "Number",
+        "verified": "Boolean",
+        "reviewTime": "String",
+        "reviewerID": "String",
+        "asin": "String",
+        "reviewerName": "String",
+        "reviewText": "String",
+        "summary": "String",
+        "unixReviewTime": "Number"
+      },
+      "pipeline": [
+        {
+          "node_id": "derive_reviewTime_from_unix",
+          "node_type": "DeriveColumn",
+          "source_columns": ["unixReviewTime"],
+          "target_column": "reviewTime",
+          "function": "lambda x: pd.to_datetime(x, unit='s').strftime('%Y-%m-%d')",
+          "drop_source": false
+        },
+        {
+          "node_id": "trim_reviewerName_spaces",
+          "node_type": "DeriveColumn",
+          "source_columns": ["reviewerName"],
+          "target_column": "reviewerName",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "coerce_overall_to_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["overall"],
+          "target_column": "overall",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "impute_overall_median",
+          "node_type": "MissingValues",
+          "columns": { "overall": { "strategy": "median" } }
+        },
+        {
+          "node_id": "cap_overall_to_1_5",
+          "node_type": "DeriveColumn",
+          "source_columns": ["overall"],
+          "target_column": "overall",
+          "function": "lambda x: 1.0 if x < 1.0 else (5.0 if x > 5.0 else float(x))",
+          "drop_source": true
+        },
+        {
+          "node_id": "drop_duplicates_reviewer_asin_reviewtime",
+          "node_type": "Duplicates"
+        }
+      ]
+    }
+  },
+  "amazon_stock_data.csv": {
+    "task": "Clean and prepare the Amazon stock dataset: standardise 'date' values to YYYY-MM-DD, filling missing dates using forward-fill. Convert all numeric columns ('open', 'high', 'low', 'close', 'adj_close', 'volume') to floats and impute missing values with the column median. Remove rows where all price fields are missing. Rename 'adj_close' to 'adjusted_close' for clarity, and trim extra spaces in text fields. Ensure consistency in numeric formats for downstream analysis.",
+    "plan": {
+      "id": "plan_amazon_stock_cleaning_v1",
+      "task_summary": "Clean and prepare the Amazon stock dataset: standardize date to YYYY-MM-DD with forward-fill for missing dates, convert numeric columns to floats and impute missing values with median, remove rows where all price fields are missing, rename adj_close to adjusted_close, and trim extra spaces in text fields.",
+      "source_dataset": "amazon_stock_data.csv",
+      "source_schema": {
+        "date": "Date",
+        "open": "Number",
+        "high": "Number",
+        "low": "Number",
+        "close": "Number",
+        "adj_close": "Number",
+        "volume": "Number"
+      },
+      "pipeline": [
+        {
+          "node_id": "trim_date_whitespace",
+          "node_type": "DeriveColumn",
+          "source_columns": ["date"],
+          "target_column": "date",
+          "function": "lambda x: x.astype(str).str.strip()",
+          "drop_source": true
+        },
+        {
+          "node_id": "standardize_date_format",
+          "node_type": "DeriveColumn",
+          "source_columns": ["date"],
+          "target_column": "date",
+          "function": "lambda x: pd.to_datetime(x, errors='coerce').dt.strftime('%Y-%m-%d')",
+          "drop_source": true
+        },
+        {
+          "node_id": "forward_fill_missing_dates",
+          "node_type": "MissingValues",
+          "columns": {
+            "date": { "detect": [null, "", "None"], "strategy": "forward_fill" }
+          }
+        },
+        {
+          "node_id": "convert_open_to_float",
+          "node_type": "DeriveColumn",
+          "source_columns": ["open"],
+          "target_column": "open",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce').astype(float)",
+          "drop_source": true
+        },
+        {
+          "node_id": "convert_high_to_float",
+          "node_type": "DeriveColumn",
+          "source_columns": ["high"],
+          "target_column": "high",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce').astype(float)",
+          "drop_source": true
+        },
+        {
+          "node_id": "convert_low_to_float",
+          "node_type": "DeriveColumn",
+          "source_columns": ["low"],
+          "target_column": "low",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce').astype(float)",
+          "drop_source": true
+        },
+        {
+          "node_id": "convert_close_to_float",
+          "node_type": "DeriveColumn",
+          "source_columns": ["close"],
+          "target_column": "close",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce').astype(float)",
+          "drop_source": true
+        },
+        {
+          "node_id": "convert_adj_close_to_float",
+          "node_type": "DeriveColumn",
+          "source_columns": ["adj_close"],
+          "target_column": "adj_close",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce').astype(float)",
+          "drop_source": true
+        },
+        {
+          "node_id": "convert_volume_to_float",
+          "node_type": "DeriveColumn",
+          "source_columns": ["volume"],
+          "target_column": "volume",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce').astype(float)",
+          "drop_source": true
+        },
+        {
+          "node_id": "flag_rows_all_prices_missing",
+          "node_type": "DeriveColumn",
+          "source_columns": ["open", "high", "low", "close", "adj_close"],
+          "target_column": "price_any_present",
+          "function": "lambda row: 1 if (pd.notnull(row['open']) or pd.notnull(row['high']) or pd.notnull(row['low']) or pd.notnull(row['close']) or pd.notnull(row['adj_close'])) else None",
+          "drop_source": false
+        },
+        {
+          "node_id": "drop_rows_where_all_prices_missing",
+          "node_type": "MissingValues",
+          "columns": {
+            "price_any_present": { "detect": [null], "strategy": "drop_row" }
+          }
+        },
+        {
+          "node_id": "drop_helper_price_any_present",
+          "node_type": "DeriveColumn",
+          "source_columns": ["price_any_present"],
+          "drop_source": true
+        },
+        {
+          "node_id": "impute_numeric_medians",
+          "node_type": "MissingValues",
+          "columns": {
+            "open": { "detect": [null], "strategy": "median" },
+            "high": { "detect": [null], "strategy": "median" },
+            "low": { "detect": [null], "strategy": "median" },
+            "close": { "detect": [null], "strategy": "median" },
+            "adj_close": { "detect": [null], "strategy": "median" },
+            "volume": { "detect": [null], "strategy": "median" }
+          }
+        },
+        {
+          "node_id": "rename_adj_close_to_adjusted_close",
+          "node_type": "DeriveColumn",
+          "source_columns": ["adj_close"],
+          "target_column": "adjusted_close",
+          "drop_source": true
+        },
+        { "node_id": "remove_duplicate_rows", "node_type": "Duplicates" }
+      ]
+    }
+  },
+  "chemistry_field_data.csv": {
+    "task": "Standardise the chemistry field dataset: trim spaces in identifiers like CHEMISTRY_ID, BIOMASS_ID, and ORGANISM_ID. Ensure 'ACTIVITY' is a valid percentage between 0–100; mark invalid values as null. Fill missing LATITUDE and LONGITUDE values with their respective column means. Convert 'ASSAY_DATE' to ISO format (YYYY-MM-DD). Finally, remove exact duplicate rows to ensure data integrity.",
+    "plan": {
+      "id": "chem_field_standardization_v1",
+      "task_summary": "Standardize identifiers, validate ACTIVITY as 0–100 percent with invalids set to null, impute LATITUDE/LONGITUDE with means, convert ASSAY_DATE to ISO (YYYY-MM-DD), and remove exact duplicates.",
+      "source_dataset": "chemistry_field_data.csv",
+      "source_schema": {
+        "CHEMISTRY_ID": "String",
+        "CHEMISTRY_TYPE": "String",
+        "ASSAY_CATEGORY": "String",
+        "ASSAY_NAME": "String",
+        "ACTIVITY": "Number",
+        "BIOMASS_ID": "String",
+        "ORGANISM_ID": "String",
+        "LATITUDE": "Number",
+        "LONGITUDE": "Number",
+        "ASSAY_DATE": "Date",
+        "COMMON_NAME": "String",
+        "FAMILY": "String",
+        "GENUS": "String",
+        "SPECIES": "String"
+      },
+      "pipeline": [
+        {
+          "node_id": "trim_chemistry_id",
+          "node_type": "DeriveColumn",
+          "source_columns": ["CHEMISTRY_ID"],
+          "target_column": "CHEMISTRY_ID",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_biomass_id",
+          "node_type": "DeriveColumn",
+          "source_columns": ["BIOMASS_ID"],
+          "target_column": "BIOMASS_ID",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_organism_id",
+          "node_type": "DeriveColumn",
+          "source_columns": ["ORGANISM_ID"],
+          "target_column": "ORGANISM_ID",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "clean_activity_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["ACTIVITY"],
+          "target_column": "ACTIVITY",
+          "function": "lambda x: float(str(x).replace('%','').strip()) if x is not None and str(x).strip() not in ['', 'NA', 'N/A'] and str(x).replace('%','').replace('.','',1).isdigit() else None",
+          "drop_source": true
+        },
+        {
+          "node_id": "validate_activity_bounds",
+          "node_type": "DeriveColumn",
+          "source_columns": ["ACTIVITY"],
+          "target_column": "ACTIVITY",
+          "function": "lambda x: x if x is not None and 0 <= x <= 100 else None",
+          "drop_source": true
+        },
+        {
+          "node_id": "impute_lat_long_means",
+          "node_type": "MissingValues",
+          "columns": {
+            "LATITUDE": {
+              "detect": [null, "", "NA", "N/A"],
+              "strategy": "mean"
+            },
+            "LONGITUDE": {
+              "detect": [null, "", "NA", "N/A"],
+              "strategy": "mean"
+            }
+          }
+        },
+        {
+          "node_id": "assay_date_to_iso",
+          "node_type": "DeriveColumn",
+          "source_columns": ["ASSAY_DATE"],
+          "target_column": "ASSAY_DATE",
+          "function": "lambda x: pd.to_datetime(x, errors='coerce').strftime('%Y-%m-%d') if pd.notnull(pd.to_datetime(x, errors='coerce')) else None",
+          "drop_source": true
+        },
+        { "node_id": "remove_exact_duplicates", "node_type": "Duplicates" }
+      ]
+    }
+  },
+  "chess_games.csv": {
+    "task": "Clean and structure the chess games dataset: convert 'white_rating' and 'black_rating' to numeric values, imputing missing entries with the median. Trim spaces from player IDs and opening names. Standardise all timestamps in 'created_at' and 'last_move_at' to ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ), leaving blanks as null. Remove duplicates using the 'id' field. Ensure 'turns' are integers (defaulting invalid values to 0). Rename 'rated' to 'is_rated' for clarity.",
+    "plan": {
+      "id": "chess_games_cleaning_plan_v1",
+      "task_summary": "Clean and structure chess games: numeric ratings with median imputation, trim player IDs and opening names, standardize created_at/last_move_at to ISO 8601, remove duplicates by id, coerce turns to integers with invalids as 0, and rename rated to is_rated.",
+      "source_dataset": "chess_games.csv",
+      "source_schema": {
+        "id": "String",
+        "rated": "Boolean",
+        "created_at": "Number",
+        "last_move_at": "Number",
+        "white_id": "String",
+        "black_id": "String",
+        "white_rating": "Number",
+        "black_rating": "Number",
+        "turns": "Number",
+        "opening_eco": "String",
+        "opening_name": "String",
+        "opening_ply": "Number"
+      },
+      "pipeline": [
+        {
+          "node_id": "trim_game_id",
+          "node_type": "DeriveColumn",
+          "source_columns": ["id"],
+          "target_column": "id",
+          "function": "lambda s: s.str.strip()",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_white_id",
+          "node_type": "DeriveColumn",
+          "source_columns": ["white_id"],
+          "target_column": "white_id",
+          "function": "lambda s: s.str.strip()",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_black_id",
+          "node_type": "DeriveColumn",
+          "source_columns": ["black_id"],
+          "target_column": "black_id",
+          "function": "lambda s: s.str.strip()",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_opening_name",
+          "node_type": "DeriveColumn",
+          "source_columns": ["opening_name"],
+          "target_column": "opening_name",
+          "function": "lambda s: s.str.strip()",
+          "drop_source": true
+        },
+        {
+          "node_id": "ratings_to_numeric_white",
+          "node_type": "DeriveColumn",
+          "source_columns": ["white_rating"],
+          "target_column": "white_rating",
+          "function": "lambda s: pd.to_numeric(s, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "ratings_to_numeric_black",
+          "node_type": "DeriveColumn",
+          "source_columns": ["black_rating"],
+          "target_column": "black_rating",
+          "function": "lambda s: pd.to_numeric(s, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "impute_missing_ratings_median",
+          "node_type": "MissingValues",
+          "columns": {
+            "white_rating": {
+              "detect": [null, "", "NA", "NaN"],
+              "strategy": "median"
+            },
+            "black_rating": {
+              "detect": [null, "", "NA", "NaN"],
+              "strategy": "median"
+            }
+          }
+        },
+        {
+          "node_id": "standardize_created_at_iso8601",
+          "node_type": "DeriveColumn",
+          "source_columns": ["created_at"],
+          "target_column": "created_at",
+          "function": "lambda s: pd.to_datetime(pd.to_numeric(s, errors='coerce').mask(pd.to_numeric(s, errors='coerce') > 1e14, pd.to_numeric(s, errors='coerce')/1e6).mask((pd.to_numeric(s, errors='coerce') > 1e12) & (pd.to_numeric(s, errors='coerce') <= 1e14), pd.to_numeric(s, errors='coerce')/1e3), unit='s', utc=True, errors='coerce').combine_first(pd.to_datetime(s, utc=True, errors='coerce')).dt.strftime('%Y-%m-%dT%H:%M:%SZ')",
+          "drop_source": true
+        },
+        {
+          "node_id": "standardize_last_move_at_iso8601",
+          "node_type": "DeriveColumn",
+          "source_columns": ["last_move_at"],
+          "target_column": "last_move_at",
+          "function": "lambda s: pd.to_datetime(pd.to_numeric(s, errors='coerce').mask(pd.to_numeric(s, errors='coerce') > 1e14, pd.to_numeric(s, errors='coerce')/1e6).mask((pd.to_numeric(s, errors='coerce') > 1e12) & (pd.to_numeric(s, errors='coerce') <= 1e14), pd.to_numeric(s, errors='coerce')/1e3), unit='s', utc=True, errors='coerce').combine_first(pd.to_datetime(s, utc=True, errors='coerce')).dt.strftime('%Y-%m-%dT%H:%M:%SZ')",
+          "drop_source": true
+        },
+        {
+          "node_id": "coerce_turns_to_int_default_zero",
+          "node_type": "DeriveColumn",
+          "source_columns": ["turns"],
+          "target_column": "turns",
+          "function": "lambda s: pd.to_numeric(s, errors='coerce').fillna(0).astype(int)",
+          "drop_source": true
+        },
+        {
+          "node_id": "rename_rated_to_is_rated",
+          "node_type": "DeriveColumn",
+          "source_columns": ["rated"],
+          "target_column": "is_rated",
+          "drop_source": false
+        },
+        { "node_id": "remove_duplicates_by_id", "node_type": "Duplicates" }
+      ]
+    }
+  },
+  "financial_compliance.csv": {
+    "task": "Prepare the financial compliance dataset for analysis: replace missing 'Firm_Name' and 'Industry_Affected' values with 'Unknown'. Convert all numeric columns (engagements, risk cases, compliance violations, fraud cases, revenue impact, workload, audit scores, satisfaction scores) to proper numeric types and impute missing values with the column medians. Clean the 'Year' field to ensure it uses four-digit years. Remove rows still missing critical fields like Total_Audit_Engagements or Total_Revenue_Impact after imputation. Rename 'AI_Used_for_Auditing' to 'AI_Audit_Flag' and standardise values as 'Yes' or 'No' (defaulting blanks to 'No'). Trim spaces from all text columns.",
+    "plan": {
+      "id": "financial_compliance_cleaning_v1",
+      "task_summary": "Prepare the financial compliance dataset: trim text, fill missing Firm_Name and Industry_Affected with 'Unknown'; rename and standardize AI flag to Yes/No; clean Year to four-digit numeric; coerce numeric columns and impute medians; drop rows still missing critical fields (Total_Audit_Engagements or Total_Revenue_Impact); remove duplicates.",
+      "source_dataset": "financial_compliance.csv",
+      "source_schema": {
+        "Year": "Number",
+        "Firm_Name": "String",
+        "Industry_Affected": "String",
+        "Total_Audit_Engagements": "Number",
+        "Total_Risk_Cases": "Number",
+        "Total_Compliance_Violations": "Number",
+        "Total_Fraud_Cases": "Number",
+        "Total_Revenue_Impact": "Number",
+        "Employee_Workload": "Number",
+        "Audit_Effectiveness_Score": "Number",
+        "Client_Satisfaction_Score": "Number",
+        "AI_Used_for_Auditing": "String"
+      },
+      "pipeline": [
+        {
+          "node_id": "trim_firm_name",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Firm_Name"],
+          "target_column": "Firm_Name",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_industry_affected",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Industry_Affected"],
+          "target_column": "Industry_Affected",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_ai_used_for_auditing",
+          "node_type": "DeriveColumn",
+          "source_columns": ["AI_Used_for_Auditing"],
+          "target_column": "AI_Used_for_Auditing",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "rename_ai_flag",
+          "node_type": "DeriveColumn",
+          "source_columns": ["AI_Used_for_Auditing"],
+          "target_column": "AI_Audit_Flag",
+          "drop_source": false
+        },
+        {
+          "node_id": "standardize_ai_flag_yes_no",
+          "node_type": "DeriveColumn",
+          "source_columns": ["AI_Audit_Flag"],
+          "target_column": "AI_Audit_Flag",
+          "function": "lambda v: 'No' if (v is None or (isinstance(v, str) and v.strip()=='')) else ('Yes' if str(v).strip().lower() in ['yes','y','true','1'] else 'No')",
+          "drop_source": true
+        },
+        {
+          "node_id": "impute_unknown_for_texts",
+          "node_type": "MissingValues",
+          "columns": {
+            "Firm_Name": {
+              "detect": [null, ""],
+              "strategy": "impute_user",
+              "user_value": "Unknown"
+            },
+            "Industry_Affected": {
+              "detect": [null, ""],
+              "strategy": "impute_user",
+              "user_value": "Unknown"
+            }
+          }
+        },
+        {
+          "node_id": "convert_year_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Year"],
+          "target_column": "Year",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "ensure_year_four_digits",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Year"],
+          "target_column": "Year",
+          "function": "lambda y: int(y + 2000) if pd.notnull(y) and 0 <= y < 100 else (int(y) if pd.notnull(y) and 1900 <= y <= 2099 else None)",
+          "drop_source": true
+        },
+        {
+          "node_id": "to_numeric_total_audit_engagements",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Total_Audit_Engagements"],
+          "target_column": "Total_Audit_Engagements",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "to_numeric_total_risk_cases",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Total_Risk_Cases"],
+          "target_column": "Total_Risk_Cases",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "to_numeric_total_compliance_violations",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Total_Compliance_Violations"],
+          "target_column": "Total_Compliance_Violations",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "to_numeric_total_fraud_cases",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Total_Fraud_Cases"],
+          "target_column": "Total_Fraud_Cases",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "to_numeric_total_revenue_impact",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Total_Revenue_Impact"],
+          "target_column": "Total_Revenue_Impact",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "to_numeric_employee_workload",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Employee_Workload"],
+          "target_column": "Employee_Workload",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "to_numeric_audit_effectiveness_score",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Audit_Effectiveness_Score"],
+          "target_column": "Audit_Effectiveness_Score",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "to_numeric_client_satisfaction_score",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Client_Satisfaction_Score"],
+          "target_column": "Client_Satisfaction_Score",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "impute_numeric_medians",
+          "node_type": "MissingValues",
+          "columns": {
+            "Total_Audit_Engagements": { "strategy": "median" },
+            "Total_Risk_Cases": { "strategy": "median" },
+            "Total_Compliance_Violations": { "strategy": "median" },
+            "Total_Fraud_Cases": { "strategy": "median" },
+            "Total_Revenue_Impact": { "strategy": "median" },
+            "Employee_Workload": { "strategy": "median" },
+            "Audit_Effectiveness_Score": { "strategy": "median" },
+            "Client_Satisfaction_Score": { "strategy": "median" }
+          }
+        },
+        {
+          "node_id": "drop_rows_missing_critical_after_impute",
+          "node_type": "MissingValues",
+          "columns": {
+            "Total_Audit_Engagements": {
+              "detect": [null],
+              "strategy": "drop_row"
+            },
+            "Total_Revenue_Impact": { "detect": [null], "strategy": "drop_row" }
+          }
+        },
+        { "node_id": "remove_duplicates_final", "node_type": "Duplicates" }
+      ]
+    }
+  },
+  "flight_routes.json": {
+    "task": "Clean the flight routes dataset: remove duplicate entries. Validate latitude and longitude values so that latitude falls within -90 to 90 and longitude within -180 to 180; set invalid values to null. Fill missing coordinates with the mean of their respective columns. Rename columns for clarity: 'src' to 'source_airport', 'dst' to 'destination_airport', 'src_lat' to 'source_latitude', 'src_lon' to 'source_longitude', 'dst_lat' to 'destination_latitude', 'dst_lon' to 'destination_longitude'.",
+    "plan": {
+      "id": "flight_routes_cleaning_plan_v1",
+      "task_summary": "Clean flight routes: remove duplicates; validate lat/lon within valid ranges (-90 to 90 for latitude, -180 to 180 for longitude) and set invalid values to null; impute missing coordinates with column mean; rename columns for clarity.",
+      "source_dataset": "flight_routes.json",
+      "source_schema": {
+        "dst_lat": "Number",
+        "dst": "String",
+        "src_lat": "Number",
+        "src_lon": "Number",
+        "src": "String",
+        "dst_lon": "Number"
+      },
+      "pipeline": [
+        { "node_id": "remove_duplicates", "node_type": "Duplicates" },
+        {
+          "node_id": "validate_coordinates_outliers_to_null",
+          "node_type": "OutliersAndAnomalies",
+          "columns": {
+            "src_lat": {
+              "normal_values": { "min": -90, "max": 90 },
+              "strategy": "impute_user",
+              "user_value": null
+            },
+            "dst_lat": {
+              "normal_values": { "min": -90, "max": 90 },
+              "strategy": "impute_user",
+              "user_value": null
+            },
+            "src_lon": {
+              "normal_values": { "min": -180, "max": 180 },
+              "strategy": "impute_user",
+              "user_value": null
+            },
+            "dst_lon": {
+              "normal_values": { "min": -180, "max": 180 },
+              "strategy": "impute_user",
+              "user_value": null
+            }
+          }
+        },
+        {
+          "node_id": "impute_missing_coordinates_mean",
+          "node_type": "MissingValues",
+          "columns": {
+            "src_lat": { "detect": [null], "strategy": "mean" },
+            "dst_lat": { "detect": [null], "strategy": "mean" },
+            "src_lon": { "detect": [null], "strategy": "mean" },
+            "dst_lon": { "detect": [null], "strategy": "mean" }
+          }
+        },
+        {
+          "node_id": "rename_src_to_source_airport",
+          "node_type": "DeriveColumn",
+          "source_columns": ["src"],
+          "target_column": "source_airport",
+          "drop_source": false
+        },
+        {
+          "node_id": "rename_dst_to_destination_airport",
+          "node_type": "DeriveColumn",
+          "source_columns": ["dst"],
+          "target_column": "destination_airport",
+          "drop_source": false
+        },
+        {
+          "node_id": "rename_src_lat_to_source_latitude",
+          "node_type": "DeriveColumn",
+          "source_columns": ["src_lat"],
+          "target_column": "source_latitude",
+          "drop_source": false
+        },
+        {
+          "node_id": "rename_src_lon_to_source_longitude",
+          "node_type": "DeriveColumn",
+          "source_columns": ["src_lon"],
+          "target_column": "source_longitude",
+          "drop_source": false
+        },
+        {
+          "node_id": "rename_dst_lat_to_destination_latitude",
+          "node_type": "DeriveColumn",
+          "source_columns": ["dst_lat"],
+          "target_column": "destination_latitude",
+          "drop_source": false
+        },
+        {
+          "node_id": "rename_dst_lon_to_destination_longitude",
+          "node_type": "DeriveColumn",
+          "source_columns": ["dst_lon"],
+          "target_column": "destination_longitude",
+          "drop_source": false
+        }
+      ]
+    }
+  },
+  "netflix_users.csv": {
+    "task": "Clean and standardise Netflix user data: ensure 'Age' falls between 0–120; replace invalid or missing values with 35. Fill missing 'Country' with 'USA'. Remove extra spaces in 'Name' and 'Favorite_Genre'. Make sure 'User_ID' is always a unique integer, assigning new IDs where necessary. Convert 'Last_Login' to the YYYY-MM-DD format consistently across the dataset.",
+    "plan": {
+      "id": "netflix_users_clean_standardize_v1",
+      "task_summary": "Clean and standardise Netflix user data: validate Age (0–120, else 35), impute missing Age with 35, fill missing Country with 'USA', trim extra spaces in Name and Favorite_Genre, ensure User_ID is a unique integer by assigning sequential IDs, and standardize Last_Login to YYYY-MM-DD.",
+      "source_dataset": "netflix_users.csv",
+      "source_schema": {
+        "User_ID": "float64",
+        "Name": "object",
+        "Age": "float64",
+        "Country": "object",
+        "Subscription_Type": "object",
+        "Watch_Time_Hours": "float64",
+        "Favorite_Genre": "object",
+        "Last_Login": "object"
+      },
+      "pipeline": [
+        {
+          "node_id": "missing_values_age_country",
+          "node_type": "MissingValues",
+          "columns": {
+            "Age": {
+              "detect": [null, "None", ""],
+              "strategy": "impute_user",
+              "user_value": 35
+            },
+            "Country": {
+              "detect": [null, "None", ""],
+              "strategy": "impute_user",
+              "user_value": "USA"
+            }
+          }
+        },
+        {
+          "node_id": "outliers_age_range_to_35",
+          "node_type": "OutliersAndAnomalies",
+          "columns": {
+            "Age": {
+              "normal_values": { "min": 0, "max": 120 },
+              "strategy": "impute_user",
+              "user_value": 35
+            }
+          }
+        },
+        {
+          "node_id": "clean_name_whitespace",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Name"],
+          "target_column": "Name",
+          "function": "lambda x: ' '.join(x.split()) if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "clean_favorite_genre_whitespace",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Favorite_Genre"],
+          "target_column": "Favorite_Genre",
+          "function": "lambda x: ' '.join(x.split()) if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "standardize_last_login_to_yyyy_mm_dd",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Last_Login"],
+          "target_column": "Last_Login",
+          "function": "lambda x: pd.to_datetime(x, errors='coerce').dt.strftime('%Y-%m-%d')",
+          "drop_source": true
+        },
+        {
+          "node_id": "ensure_user_id_unique_integer",
+          "node_type": "DeriveColumn",
+          "source_columns": ["User_ID", "Name"],
+          "target_column": "User_ID",
+          "function": "lambda row: int(row.name) + 1",
+          "drop_source": false
+        }
+      ]
+    }
+  },
+  "news_categories.json": {
+    "task": "Prepare the news categories dataset: fill missing or empty 'authors' values with 'Unknown'. Remove leading and trailing spaces from text columns ('short_description', 'category', 'headline', 'authors'). Convert 'date' values to a consistent YYYY-MM-DD format. Rename 'short_description' to 'summary' for improved readability.",
+    "plan": {
+      "id": "news_categories_prep_v1",
+      "task_summary": "Prepare the news categories dataset: fill missing or empty 'authors' values with 'Unknown'. Remove leading and trailing spaces from text columns ('short_description', 'category', 'headline', 'authors'). Convert 'date' values to a consistent YYYY-MM-DD format. Rename 'short_description' to 'summary' for improved readability.",
+      "source_dataset": "news_categories.json",
+      "source_schema": {
+        "category": "String",
+        "headline": "String",
+        "authors": "String",
+        "link": "String",
+        "short_description": "String",
+        "date": "Date"
+      },
+      "pipeline": [
+        {
+          "node_id": "trim_short_description_whitespace",
+          "node_type": "DeriveColumn",
+          "source_columns": "short_description",
+          "target_column": "short_description",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_category_whitespace",
+          "node_type": "DeriveColumn",
+          "source_columns": "category",
+          "target_column": "category",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_headline_whitespace",
+          "node_type": "DeriveColumn",
+          "source_columns": "headline",
+          "target_column": "headline",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_authors_whitespace",
+          "node_type": "DeriveColumn",
+          "source_columns": "authors",
+          "target_column": "authors",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "impute_missing_authors_unknown",
+          "node_type": "MissingValues",
+          "columns": {
+            "authors": {
+              "detect": [null, ""],
+              "strategy": "impute_user",
+              "user_value": "Unknown"
+            }
+          }
+        },
+        {
+          "node_id": "standardize_date_format",
+          "node_type": "DeriveColumn",
+          "source_columns": "date",
+          "target_column": "date",
+          "function": "lambda x: pd.to_datetime(x).strftime('%Y-%m-%d')",
+          "drop_source": true
+        },
+        {
+          "node_id": "rename_short_description_to_summary",
+          "node_type": "DeriveColumn",
+          "source_columns": "short_description",
+          "target_column": "summary",
+          "drop_source": false
+        }
+      ]
+    }
+  },
+  "pixar_films.csv": {
+    "task": "Standardise Pixar films data: convert 'run_time' into integer minutes and impute missing values with the median. Standardise 'release_date' to YYYY-MM-DD. Replace missing 'budget' with 100,000,000. Drop rows missing both 'film' and 'ID'. Fill missing 'film_rating' using the mode. Ensure numeric fields like box office and scores are properly typed. Trim spaces from text fields and remove duplicate entries based on the same film and release_date.",
+    "plan": {
+      "id": "pixar_films_standardization_v1",
+      "task_summary": "Standardise Pixar films data: convert run_time to integer minutes with median imputation; standardise release_date to YYYY-MM-DD; impute budget=100,000,000 where missing; drop rows missing both film and ID; fill missing film_rating using mode; coerce numeric fields (box office and scores) to numeric; trim text fields; remove duplicates based on film and release_date.",
+      "source_dataset": "pixar_films.csv",
+      "source_schema": {
+        "ID": "Number",
+        "film": "String",
+        "film_rating": "String",
+        "cinema_score": "String",
+        "release_date": "String",
+        "run_time": "String",
+        "budget": "Number",
+        "box_office_domestic": "Number",
+        "box_office_worldwide": "Number",
+        "rotten_tomatoes_score": "Number",
+        "rotten_tomatoes_counts": "Number",
+        "metacritic_score": "Number",
+        "metacritic_counts": "Number",
+        "imdb_score": "Number",
+        "imdb_counts": "Number"
+      },
+      "pipeline": [
+        {
+          "node_id": "trim_film_whitespace",
+          "node_type": "DeriveColumn",
+          "source_columns": ["film"],
+          "target_column": "film",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_film_rating_whitespace",
+          "node_type": "DeriveColumn",
+          "source_columns": ["film_rating"],
+          "target_column": "film_rating",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "trim_cinema_score_whitespace",
+          "node_type": "DeriveColumn",
+          "source_columns": ["cinema_score"],
+          "target_column": "cinema_score",
+          "function": "lambda x: x.strip() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "standardize_release_date_to_iso",
+          "node_type": "DeriveColumn",
+          "source_columns": ["release_date"],
+          "target_column": "release_date",
+          "function": "lambda x: (pd.to_datetime(x, errors='coerce', dayfirst=True).strftime('%Y-%m-%d') if pd.notnull(pd.to_datetime(x, errors='coerce', dayfirst=True)) else None)",
+          "drop_source": true
+        },
+        {
+          "node_id": "flag_rows_missing_film_and_id",
+          "node_type": "DeriveColumn",
+          "source_columns": ["film", "ID"],
+          "target_column": "drop_missing_film_id",
+          "function": "lambda row: ((pd.isna(row['film']) or (isinstance(row['film'], str) and row['film'].strip()=='')) and pd.isna(row['ID']))",
+          "drop_source": false
+        },
+        {
+          "node_id": "drop_rows_missing_both_film_and_id",
+          "node_type": "OutliersAndAnomalies",
+          "columns": {
+            "drop_missing_film_id": {
+              "normal_values": [false],
+              "strategy": "drop"
+            }
+          }
+        },
+        {
+          "node_id": "drop_helper_flag_missing_film_id",
+          "node_type": "DeriveColumn",
+          "source_columns": ["drop_missing_film_id"],
+          "drop_source": true
+        },
+        {
+          "node_id": "create_dedupe_key_film_release_date",
+          "node_type": "DeriveColumn",
+          "source_columns": ["film", "release_date"],
+          "target_column": "dedupe_key",
+          "function": "lambda row: ((row['film'].strip() if isinstance(row['film'], str) else '') + '|' + (row['release_date'] if isinstance(row['release_date'], str) else ''))",
+          "drop_source": false
+        },
+        { "node_id": "remove_duplicate_rows", "node_type": "Duplicates" },
+        {
+          "node_id": "drop_dedupe_key",
+          "node_type": "DeriveColumn",
+          "source_columns": ["dedupe_key"],
+          "drop_source": true
+        },
+        {
+          "node_id": "convert_run_time_to_minutes_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["run_time"],
+          "target_column": "run_time",
+          "function": "lambda x: (int(str(x).lower().split('h')[0]) * 60 + int(''.join([c for c in str(x).lower().split('h')[1] if c.isdigit()]) or 0)) if isinstance(x, str) and 'h' in str(x).lower() else pd.to_numeric(''.join([c for c in str(x) if c.isdigit()]), errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "cast_id_to_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["ID"],
+          "target_column": "ID",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "cast_budget_to_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["budget"],
+          "target_column": "budget",
+          "function": "lambda x: pd.to_numeric(str(x).replace(',', '').replace('$', ''), errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "cast_box_office_domestic_to_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["box_office_domestic"],
+          "target_column": "box_office_domestic",
+          "function": "lambda x: pd.to_numeric(str(x).replace(',', '').replace('$', ''), errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "cast_box_office_worldwide_to_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["box_office_worldwide"],
+          "target_column": "box_office_worldwide",
+          "function": "lambda x: pd.to_numeric(str(x).replace(',', '').replace('$', ''), errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "cast_rotten_tomatoes_score_to_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["rotten_tomatoes_score"],
+          "target_column": "rotten_tomatoes_score",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "cast_rotten_tomatoes_counts_to_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["rotten_tomatoes_counts"],
+          "target_column": "rotten_tomatoes_counts",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "cast_metacritic_score_to_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["metacritic_score"],
+          "target_column": "metacritic_score",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "cast_metacritic_counts_to_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["metacritic_counts"],
+          "target_column": "metacritic_counts",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "cast_imdb_score_to_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["imdb_score"],
+          "target_column": "imdb_score",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "cast_imdb_counts_to_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": ["imdb_counts"],
+          "target_column": "imdb_counts",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "impute_missing_values_run_time_budget_film_rating",
+          "node_type": "MissingValues",
+          "columns": {
+            "run_time": { "strategy": "median" },
+            "budget": { "strategy": "impute_user", "user_value": 100000000 },
+            "film_rating": { "detect": ["", null], "strategy": "mode" }
+          }
+        },
+        {
+          "node_id": "cast_run_time_to_integer_minutes",
+          "node_type": "DeriveColumn",
+          "source_columns": ["run_time"],
+          "target_column": "run_time",
+          "function": "lambda x: int(round(x)) if pd.notnull(x) else None",
+          "drop_source": true
+        }
+      ]
+    }
+  },
+  "smartwatch_readings.csv": {
+    "task": "Prepare smartwatch readings: ensure 'User ID' is a valid integer and drop rows where it is missing or invalid. For 'Heart Rate (BPM)', impute missing values with the mean and enforce realistic limits (40–220). For 'Sleep Duration (hours)', replace missing values with the median and flag durations less than 2 or greater than 16 as outliers. Standardise 'Activity Level' by fixing inconsistent labels (e.g., unify Highly Active/Highly_Active, correct Seddentary to Sedentary). Trim extra spaces from text. Rename 'Blood Oxygen Level (%)' to 'blood_oxygen_percent' and 'Step Count' to 'step_count'.",
+    "plan": {
+      "id": "smartwatch_readings_cleaning_plan_v1",
+      "task_summary": "Prepare smartwatch readings: ensure 'User ID' is an integer and drop rows where it is missing/invalid; for 'Heart Rate (BPM)', replace out-of-range values outside 40–220 and impute missing with mean; for 'Sleep Duration (hours)', flag values <2 or >16 and impute missing with median; standardize and trim 'Activity Level' labels; rename columns 'Blood Oxygen Level (%)' to 'blood_oxygen_percent' and 'Step Count' to 'step_count'.",
+      "source_dataset": "smartwatch_readings.csv",
+      "source_schema": {
+        "User ID": "Number",
+        "Heart Rate (BPM)": "Number",
+        "Blood Oxygen Level (%)": "Number",
+        "Step Count": "Number",
+        "Sleep Duration (hours)": "Number",
+        "Activity Level": "String",
+        "Stress Level": "Number"
+      },
+      "pipeline": [
+        {
+          "node_id": "coerce_user_id_to_int",
+          "node_type": "DeriveColumn",
+          "source_columns": ["User ID"],
+          "target_column": "User ID",
+          "function": "lambda x: (int(float(x)) if pd.notnull(x) and float(x).is_integer() else None)",
+          "drop_source": true
+        },
+        {
+          "node_id": "drop_rows_missing_user_id",
+          "node_type": "MissingValues",
+          "columns": {
+            "User ID": { "detect": [null, "", "NaN"], "strategy": "drop_row" }
+          }
+        },
+        {
+          "node_id": "handle_hr_outliers",
+          "node_type": "OutliersAndAnomalies",
+          "columns": {
+            "Heart Rate (BPM)": {
+              "normal_values": { "min": 40, "max": 220 },
+              "strategy": "median"
+            }
+          }
+        },
+        {
+          "node_id": "impute_missing_heart_rate_mean",
+          "node_type": "MissingValues",
+          "columns": { "Heart Rate (BPM)": { "strategy": "mean" } }
+        },
+        {
+          "node_id": "flag_sleep_duration_outliers",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Sleep Duration (hours)"],
+          "target_column": "sleep_outlier_flag",
+          "function": "lambda x: (pd.notnull(x) and ((x < 2) or (x > 16)))",
+          "drop_source": false
+        },
+        {
+          "node_id": "impute_sleep_duration_median",
+          "node_type": "MissingValues",
+          "columns": { "Sleep Duration (hours)": { "strategy": "median" } }
+        },
+        {
+          "node_id": "standardize_activity_level",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Activity Level"],
+          "target_column": "Activity Level",
+          "function": "lambda x: (None if pd.isnull(x) or str(x).strip().lower()=='none' else {'highly active':'Highly Active','sedentary':'Sedentary','seddentary':'Sedentary','active':'Active','actve':'Active'}.get(str(x).strip().replace('_',' ').lower(), str(x).strip()))",
+          "drop_source": true
+        },
+        {
+          "node_id": "rename_blood_oxygen_percent",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Blood Oxygen Level (%)"],
+          "target_column": "blood_oxygen_percent",
+          "drop_source": false
+        },
+        {
+          "node_id": "rename_step_count",
+          "node_type": "DeriveColumn",
+          "source_columns": ["Step Count"],
+          "target_column": "step_count",
+          "drop_source": false
+        }
+      ]
+    }
+  },
+  "social_media_posts.json": {
+    "task": "Clean social media posts: ensure 'tags' are stored as comma-separated strings, not lists. Remove unnecessary spaces in 'text'. Fill missing 'engagement' values with the dataset median. Ensure 'line_count' is an integer within 1–15, adjusting values outside the range to the nearest valid boundary.",
+    "plan": {
+      "id": "plan_social_media_posts_cleaning_v1",
+      "task_summary": "Clean social media posts: ensure 'tags' are comma-separated strings (not lists), trim and collapse spaces in 'text', fill missing 'engagement' with the dataset median, and coerce 'line_count' to an integer clamped to 1–15.",
+      "source_dataset": "social_media_posts.json",
+      "source_schema": {
+        "tone": "String",
+        "engagement": "Number",
+        "language": "String",
+        "line_count": "Number",
+        "text": "String",
+        "tags": "Complex"
+      },
+      "pipeline": [
+        {
+          "node_id": "missing_engagement_to_median",
+          "node_type": "MissingValues",
+          "columns": {
+            "engagement": { "detect": [null], "strategy": "median" }
+          }
+        },
+        {
+          "node_id": "clean_text_whitespace",
+          "node_type": "DeriveColumn",
+          "source_columns": ["text"],
+          "target_column": "text",
+          "function": "lambda x: ' '.join(x.split()) if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "tags_list_to_csv_string",
+          "node_type": "DeriveColumn",
+          "source_columns": ["tags"],
+          "target_column": "tags",
+          "function": "lambda x: ', '.join(x) if isinstance(x, (list, tuple)) else (x if isinstance(x, str) else '')",
+          "drop_source": true
+        },
+        {
+          "node_id": "clamp_line_count_1_15_int",
+          "node_type": "DeriveColumn",
+          "source_columns": ["line_count"],
+          "target_column": "line_count",
+          "function": "lambda x: int(min(15, max(1, int(pd.to_numeric(x, errors='coerce'))))) if pd.notnull(pd.to_numeric(x, errors='coerce')) else 1",
+          "drop_source": true
+        }
+      ]
+    }
+  },
+  "students_grades.json": {
+    "task": "Standardise student grades data: impute missing 'Assignments_Avg' with the mean and rename it to 'Average_Assignment_Score'. Replace missing 'Parent_Education_Level' with 'Unknown'. Convert 'Email' addresses to lowercase and strip spaces. Remove duplicate records based on First_Name, Last_Name, and Department. Ensure 'Attendance (%)' is numeric. Flag 'Age' values outside 17–30 as potential outliers. Rename 'Quizzes_Avg' to 'Average_Quiz_Score' for consistency.",
+    "plan": {
+      "id": "standardize_students_grades_v1",
+      "task_summary": "Standardise student grades data: impute missing 'Assignments_Avg' with the mean and rename it to 'Average_Assignment_Score'. Replace missing 'Parent_Education_Level' with 'Unknown'. Convert 'Email' addresses to lowercase and strip spaces. Remove duplicate records based on First_Name, Last_Name, and Department. Ensure 'Attendance (%)' is numeric. Flag 'Age' values outside 17–30 as potential outliers. Rename 'Quizzes_Avg' to 'Average_Quiz_Score' for consistency.",
+      "source_dataset": "students_grades.json",
+      "source_schema": {
+        "Total_Score": "Number",
+        "Projects_Score": "Number",
+        "Extracurricular_Activities": "String",
+        "Family_Income_Level": "String",
+        "Stress_Level (1-10)": "Number",
+        "Study_Hours_per_Week": "Number",
+        "Final_Score": "Number",
+        "Grade": "String",
+        "Assignments_Avg": "Number",
+        "Quizzes_Avg": "Number",
+        "Parent_Education_Level": "String",
+        "Email": "String",
+        "Attendance (%)": "String",
+        "Age": "Number",
+        "First_Name": "String",
+        "Last_Name": "String",
+        "Department": "String"
+      },
+      "pipeline": [
+        {
+          "node_id": "impute_assignments_and_parent_edu",
+          "node_type": "MissingValues",
+          "columns": {
+            "Assignments_Avg": {
+              "detect": [null, "", "NA", "N/A"],
+              "strategy": "mean"
+            },
+            "Parent_Education_Level": {
+              "detect": [null, "", "NA", "N/A"],
+              "strategy": "impute_user",
+              "user_value": "Unknown"
+            }
+          }
+        },
+        {
+          "node_id": "rename_assignments_avg_to_average_assignment_score",
+          "node_type": "DeriveColumn",
+          "source_columns": "Assignments_Avg",
+          "target_column": "Average_Assignment_Score",
+          "drop_source": false
+        },
+        {
+          "node_id": "rename_quizzes_avg_to_average_quiz_score",
+          "node_type": "DeriveColumn",
+          "source_columns": "Quizzes_Avg",
+          "target_column": "Average_Quiz_Score",
+          "drop_source": false
+        },
+        {
+          "node_id": "standardize_email_lower_strip",
+          "node_type": "DeriveColumn",
+          "source_columns": "Email",
+          "target_column": "Email",
+          "function": "lambda x: x.strip().lower() if isinstance(x, str) else x",
+          "drop_source": true
+        },
+        {
+          "node_id": "ensure_attendance_numeric",
+          "node_type": "DeriveColumn",
+          "source_columns": "Attendance (%)",
+          "target_column": "Attendance (%)",
+          "function": "lambda x: pd.to_numeric(x, errors='coerce')",
+          "drop_source": true
+        },
+        {
+          "node_id": "remove_duplicates_by_first_last_dept",
+          "node_type": "Duplicates",
+          "subset": ["First_Name", "Last_Name", "Department"]
+        },
+        {
+          "node_id": "flag_age_out_of_range_17_30",
+          "node_type": "DeriveColumn",
+          "source_columns": "Age",
+          "target_column": "Age_Outlier_Flag",
+          "function": "lambda x: True if pd.notnull(x) and (x < 17 or x > 30) else False",
+          "drop_source": false
+        }
+      ]
+    }
+  }
+}
