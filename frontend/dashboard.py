@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import matplotlib.pyplot as plt
 
 # imports for type hints 
 from typing import Any, Optional, List
@@ -50,54 +51,98 @@ def main():
     st.set_page_config(page_title="FlowETL", page_icon="🔁", initial_sidebar_state=None)
         
     st.title("FlowETL")
-    st.text("Transform your data using natural language")
+    st.text("Transform and query your data using natural language")
 
-    # user inputs : dataset uploader and task description text area
-    input_dataset = st.file_uploader(label="Upload your dataset", type=["csv", "json"], accept_multiple_files=False, key="input_dataset")
-    task_description = st.text_area(label="Describe what you want FlowETL to do", key="task_description")
 
-    # trigger transformation only if both user inputs are provided
-    trigger_btn = st.button(
-        label="Transform", 
-        key="trigger_btn", 
-        disabled=not (input_dataset and task_description), 
-        help="Ensure both the dataset and task description are provided", 
-        type="primary"
-    )
+    data_engineer, data_analyst = st.tabs(["Prepare your dataset", "Analyse your dataset"])
 
-    if trigger_btn:
+    # dataset preparation tab
+    with data_engineer:
+        # user inputs : dataset uploader and task description text area
+        input_dataset = st.file_uploader(label="Upload your dataset", type=["csv", "json"], accept_multiple_files=False, key="input_dataset")
+        task_description = st.text_area(label="Describe what you want FlowETL to do", key="task_description")
 
-        # abstract the input dataset to a pandas dataframe
-        abstraction = abstract_dataset(input_dataset)
+        # trigger transformation only if both user inputs are provided
+        trigger_btn = st.button(
+            label="Transform", 
+            key="trigger_btn", 
+            disabled=not (input_dataset and task_description), 
+            help="Ensure both the dataset and task description are provided", 
+            type="primary"
+        )
 
-        # take the min between 10% sample of the abstraction or 25 rows - this makes processing quicker
-        # we assume that the plan generated will be successfully applied to the entire dataset
-        sample_size = min(25, int(len(abstraction) * 0.1)) 
-        sampled_abstraction = abstraction.sample(n=sample_size).to_json()
+        if trigger_btn:
 
-        # extract the uploaded dataset name
-        dataset_name = input_dataset.name
+            # abstract the input dataset to a pandas dataframe
+            abstraction = abstract_dataset(input_dataset)
 
-        try:
-            response = requests.post(
-                "http://localhost:8000/", 
-                json={
-                    "source_dataset" : dataset_name,
-                    "abstraction": sampled_abstraction, 
-                    "task_description": task_description
-                }
-            )
+            # take the min between 10% sample of the abstraction or 25 rows - this makes processing quicker
+            # we assume that the plan generated will be successfully applied to the entire dataset
+            sample_size = min(25, int(len(abstraction) * 0.1)) 
+            sampled_abstraction = abstraction.sample(n=sample_size).to_json()
 
-            response_body = response.json()
-            if response.status_code == 200:
-                st.success("Plan generated but not validated")
-                st.json(response_body["plan"])
-            else:
-                # FastAPI uses HTTPException by default, hence we assume an error returns the "detail" key
-                st.error(response_body.get("detail"))
+            # extract the uploaded dataset name
+            dataset_name = input_dataset.name
 
-        except requests.exceptions.RequestException as e:
-            st.error(f"Request failed: {e}")
+            try:
+                response = requests.post(
+                    "http://localhost:8000/transform", 
+                    json={
+                        "source_dataset" : dataset_name,
+                        "abstraction": sampled_abstraction, 
+                        "task_description": task_description
+                    }
+                )
+
+                response_body = response.json()
+                if response.status_code == 200:
+                    st.success("Plan generated but not validated")
+                    st.json(response_body["plan"])
+                else:
+                    # FastAPI uses HTTPException by default, hence we assume an error returns the "detail" key
+                    st.error(response_body.get("detail"))
+
+            except requests.exceptions.RequestException as e:
+                st.error(f"Request failed: {e}")
+    
+    # data analysis tab
+    with data_analyst:
+        input_dataset = st.file_uploader(label="Upload your dataset", type=["csv", "json"], accept_multiple_files=False, key="dataset_to_analyse")
+        query = st.text_area(label="Describe your data analysis query with natural language", key="data_analysis_task")
+
+        trigger_analysis_btn = st.button(
+            label="Query", 
+            key="trigger_analysis_btn", 
+            disabled=not (input_dataset and query), 
+            help="Ensure both the dataset to be analysed and your query are provided", 
+            type="primary"
+        )
+
+        if trigger_analysis_btn:
+            
+            # abstract the input dataset to a pandas dataframe
+            abstraction = abstract_dataset(input_dataset)
+
+            # take the min between 10% sample of the abstraction or 25 rows - this makes processing quicker
+            # we assume that the plan generated will be successfully applied to the entire dataset
+            sample_size = min(25, int(len(abstraction) * 0.1)) 
+            sampled_abstraction = abstraction.sample(n=sample_size).to_json()
+
+            try:
+                response = requests.post(
+                    "http://localhost:8000/analyze", 
+                    json={ "abstraction": sampled_abstraction, "query": query }
+                )
+
+                response_body = response.json()
+                if response.status_code == 200:
+                    st.success("We got a response!")
+                else:
+                    # FastAPI uses HTTPException by default, hence we assume an error returns the "detail" key
+                    st.error(response_body.get("detail"))
+
+            except requests.exceptions.RequestException as e:
+                st.error(f"Request failed: {e}")
 
 if __name__ == "__main__":
     main()

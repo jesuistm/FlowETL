@@ -1,10 +1,14 @@
 from typing import List, Any, Dict
 from pydantic import BaseModel, Field
 
-class FrontEndRequest(BaseModel):
+class DataEngineerRequest(BaseModel):
     abstraction: str = Field(description="JSON representation of the abstracted dataset sample") 
     source_dataset: str = Field(description="Name of the source dataset")
     task_description: str = Field(description="User task description in natural language")
+
+class DataAnalystRequest(BaseModel):
+    abstraction: str = Field(description="JSON representation of the abstracted dataset sample") 
+    query: str = Field(description="User data analysis query in natural language")
 
 class Plan(BaseModel):
     """The transformation plan to be parsed and applied onto the abstraction"""

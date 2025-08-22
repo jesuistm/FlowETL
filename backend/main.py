@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from backend.pydantic_models import Plan, FrontEndRequest
+from backend.pydantic_models import Plan, DataAnalystRequest, DataEngineerRequest
 import pandas as pd
 import json
 import logging
@@ -19,6 +19,9 @@ load_dotenv()
 key = os.environ["OPENAI_API_KEY"]
 
 app = FastAPI()
+
+# setup OpenAI client
+llm = ChatOpenAI(api_key=key,  model="gpt-5",  temperature=0.0)
 
 # configure API middleware
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -243,8 +246,8 @@ Container for the entire transformation pipeline.
 3. **Preserve Raw Data**: Set `drop_source=false` when you might need original values
 """
 
-# prompt include both the FlowETL Functions documentation and the task instruction for the LLM
-system_prompt_template = """
+# prompt include both the FlowETL Functions documentation and the task instruction for the data engineering LLM
+data_engineering_system_prompt = """
 You are a data engineering expert tasked with creating transformation plans using the available FlowETL Functions.
 
 DATASET:
@@ -265,29 +268,27 @@ INSTRUCTIONS:
 6. Include all required fields in the JSON output
 7. Ensure the JSON is valid and follows the exact schema shown in the documentation
 
+OUTPUT FORMAT INSTRUCTIONS
 {format_instructions}
 
 Generate a transformation plan for the {source_dataset} dataset:
 """
 
-# setup OpenAI client
-llm = ChatOpenAI(api_key=key,  model="gpt-5",  temperature=0.0)
+# setup data engineering output parser to follow pydantic schema 
+data_engineering_output_parser = JsonOutputParser(pydantic_object=Plan)
 
-# setup output parser to follow pydantic schema 
-output_parser = JsonOutputParser(pydantic_object=Plan)
-
-# define prompt structure
-prompt_template = PromptTemplate( 
-  template=system_prompt_template, 
-  input_variables=["task_description", "documentation"], 
-  partial_variables={"format_instructions": output_parser.get_format_instructions()} 
+# define data engineering prompt builder
+data_engineering_prompt_builder = PromptTemplate( 
+  template=data_engineering_system_prompt, 
+  input_variables=["task_description", "documentation", "dataset", "source_dataset"], 
+  partial_variables={"format_instructions": data_engineering_output_parser.get_format_instructions()} 
 ) 
 
-# define LangChain chain to assemble the prompt, call the llm, and parse the output
-chain = prompt_template | llm | output_parser
+# define data engineering LangChain chain
+data_engineering_chain = data_engineering_prompt_builder | llm | data_engineering_output_parser
 
-@app.post("/")
-async def process_abstraction(request: FrontEndRequest) -> Dict[str, Any]:
+@app.post("/transform")
+async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
   try:
     # reconstruct DataFrame from JSON
     abstraction = pd.DataFrame(json.loads(request.abstraction))
@@ -299,7 +300,7 @@ async def process_abstraction(request: FrontEndRequest) -> Dict[str, Any]:
     task_description = request.task_description
 
     # invoke the plan construction chain
-    result = chain.invoke({ 
+    result = data_engineering_chain.invoke({ 
       "task_description": task_description, 
       "documentation" : flowetl_documentation, 
       "source_dataset" : source_dataset,
@@ -310,3 +311,66 @@ async def process_abstraction(request: FrontEndRequest) -> Dict[str, Any]:
 
   except Exception as e:
     raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
+  
+@app.post("/analyze")
+def analyze_data(request : DataAnalystRequest) -> Dict[str, Any]:
+  try:
+    # extract the abstracted dataset sample and the user query
+    abstraction = pd.DataFrame(json.loads(request.abstraction))
+    query = request.query
+
+  except Exception as e:
+    raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
+
+
+
+# define intial prompt template to obtain both the analysis and plotting code snippets for the query
+data_analysis_system_prompt = """
+You are a Python data analyst generating executable code for pandas DataFrame queries.
+Assume the following are present in the execution environment: `pandas as pd`, `matplotlib.pyplot as plt`, `numpy as np`
+
+## TASK
+Generate code for two types of outputs:
+- analysis_code: Function `def analyze_data(df):` that processes data and returns structured results
+- plot_code: Matplotlib visualization code (optional)
+
+## QUERY CLASSIFICATION
+- Analysis: calculate, average, sum, count, filter, find, statistics, summary, top, bottom → Return dict/dataframe
+- Visualization: chart, plot, graph, visualize, distribution, histogram, bar, line, scatter → Create matplotlib plot
+- Both: "analyze and show", "summarize with chart" → Generate both codes
+
+## OUTPUT FORMAT
+```json
+{
+  "analysis_code": "def analyze_data(df):\n    # Process data, return dict/dataframe/value\n    return results",
+  "plot_code": "# Matplotlib code with labels and formatting\nplt.show()"
+}
+```
+
+## REQUIREMENTS
+- Analysis function must take `df` parameter and return results
+- Include error handling for empty data
+- Round numbers appropriately
+- Add meaningful titles/labels to plots
+- Return structured data (dict with keys like 'data', 'summary', 'count')
+
+## EXAMPLES 
+
+**"Average sales by region":**
+```json
+{
+  "analysis_code": "def analyze_data(df):\n    avg_sales = df.groupby('region')['sales'].mean().round(2)\n    return {\n        'data': avg_sales.to_dict(),\n        'highest': avg_sales.idxmax(),\n        'summary': f'Highest: {avg_sales.idxmax()} (${avg_sales.max():,.2f})'\n    }",
+  "plot_code": "avg_sales = df.groupby('region')['sales'].mean()\nplt.figure(figsize=(10,6))\navg_sales.plot(kind='bar')\nplt.title('Average Sales by Region')\nplt.ylabel('Sales ($)')\nplt.xticks(rotation=45)\nplt.tight_layout()\nplt.show()"
+}
+```
+
+**"Customers over 50":**
+```json
+{
+  "analysis_code": "def analyze_data(df):\n    filtered = df[df['age'] > 50]\n    return {\n        'data': filtered,\n        'count': len(filtered),\n        'percentage': round(len(filtered)/len(df)*100, 1),\n        'summary': f'{len(filtered)} customers over 50 ({round(len(filtered)/len(df)*100, 1)}%)'\n    }",
+  "plot_code": null
+}
+```
+
+Generate executable code for the given query.
+"""
