@@ -288,25 +288,25 @@ chain = prompt_template | llm | output_parser
 
 @app.post("/")
 async def process_abstraction(request: FrontEndRequest) -> Dict[str, Any]:
-    try:
-        # reconstruct DataFrame from JSON
-        abstraction = pd.DataFrame(json.loads(request.abstraction))
+  try:
+    # reconstruct DataFrame from JSON
+    abstraction = pd.DataFrame(json.loads(request.abstraction))
 
-        # extract the source dataset name 
-        source_dataset = request.source_dataset
+    # extract the source dataset name 
+    source_dataset = request.source_dataset
 
-        # extract task description from request payload
-        task_description = request.task_description
+    # extract task description from request payload
+    task_description = request.task_description
 
-        # invoke the plan construction chain
-        result = chain.invoke({ 
-            "task_description": task_description, 
-            "documentation" : flowetl_documentation, 
-            "source_dataset" : source_dataset,
-            "dataset" : abstraction
-        })
+    # invoke the plan construction chain
+    result = chain.invoke({ 
+      "task_description": task_description, 
+      "documentation" : flowetl_documentation, 
+      "source_dataset" : source_dataset,
+      "dataset" : abstraction
+    })
 
-        return { "plan" : result }
+    return { "plan" : result }
 
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
+  except Exception as e:
+    raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
