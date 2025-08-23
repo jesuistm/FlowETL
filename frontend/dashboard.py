@@ -3,6 +3,8 @@ import pandas as pd
 import requests
 import json
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 # imports for type hints 
 from typing import Any, Optional, List
@@ -136,8 +138,21 @@ def main():
 
                 response_body = response.json()
                 if response.status_code == 200:
-                    st.success("We got a response!")
-                    st.json(response_body['plan'])
+
+                    # check if there is a plotting function to be executed on the code
+                    plotting_code_string = response_body.get('plot_code', None)
+                    if plotting_code_string is not None:
+                        # extract the plotting function and run it on the datatse
+                        namespace = {'plt' : plt, 'pd' : pd, 'np' : np, '__builtins__' : __builtins__}
+                        exec(plotting_code_string, namespace)
+                        plotting_function = namespace['plot_data']
+
+                        # show the plot
+                        st.pyplot(plotting_function(abstraction))
+
+                    # render the query response in natural language
+                    st.markdown(response_body['summary'])
+
                 else:
                     # FastAPI uses HTTPException by default, hence we assume an error returns the "detail" key
                     st.error(response_body.get("detail"))

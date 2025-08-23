@@ -3,13 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.pydantic_models import Plan, DataAnalystRequest, DataEngineerRequest, Analysis
 import pandas as pd
 import json
+import numpy as np
 import logging
 import os
+import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 from typing import Dict, Any
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 
 # set logging to DEBUG mode
 logging.basicConfig(level=logging.INFO)
@@ -313,8 +315,6 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
 
 
-
-
 # define intial prompt template to obtain both the analysis and plotting code snippets for the query
 data_analysis_system_prompt = """
 You are a Python data analyst generating executable code for pandas DataFrame queries.
@@ -333,7 +333,7 @@ QUERY
 ## TASK
 Generate two function types based on query:
 - **analysis_code**: `def analyze_data(df):` - processes data, returns structured results
-- **plot_code**: `def plot_data(df):` - creates matplotlib visualization (optional)
+- **plot_code**: `def plot_data(df):` - creates matplotlib visualization (optional). This function should return the Matplotlib figure
 
 ## QUERY CLASSIFICATION
 - **Analysis only**: calculate, average, sum, count, filter, find, statistics, summary, top, bottom
@@ -354,6 +354,22 @@ Generate two function types based on query:
 Generate executable code for the given query.
 """
 
+data_analysis_summary_system_prompt = """
+You are a data analysis assistant tasked with converting structured analytical results to a query into clear, natural language summaries.
+
+TASK:
+- Explain key findings and patterns in accessible language
+- Highlight important metrics, trends, and outliers
+- Include specific numbers and percentages
+- Avoid including tables or other visuals in the summary
+
+QUERY
+{query}
+
+RESULTS
+{results}
+"""
+
 # define the output parser for the data analysis task
 data_analysis_output_parser = JsonOutputParser(pydantic_object=Analysis)
 
@@ -364,8 +380,17 @@ data_analysis_prompt_builder = PromptTemplate(
   partial_variables={"format_instructions": data_analysis_output_parser.get_format_instructions()} 
 ) 
 
+# define the data analysis results summary prompt builder
+data_analysis_summary_prompt_builder = PromptTemplate( 
+  template=data_analysis_summary_system_prompt, 
+  input_variables=["results", "query"], 
+) 
+
 # define the data analysis Langchain chain
 data_analysis_chain = data_analysis_prompt_builder | llm | data_analysis_output_parser
+
+# define the query result summarise Langchain chain
+summariser_chain = data_analysis_summary_prompt_builder | llm | StrOutputParser()
 
 @app.post("/analyze")
 def analyze_data(request : DataAnalystRequest) -> Dict[str, Any]:
@@ -377,7 +402,22 @@ def analyze_data(request : DataAnalystRequest) -> Dict[str, Any]:
     # invoke the plan construction chain
     result = data_analysis_chain.invoke({ "query" : query, "dataset" : abstraction })
     
-    return { "plan" : result }
+    analysis_code = result["analysis_code"]
+    plot_code = result.get("plot_code", None)
+
+    # extract the code analysis function
+    namespace = {}
+    exec(analysis_code, namespace)
+    runnable_function = namespace['analyze_data'] # called 'analyze_data' as per the llm prompt
+
+    # execute the function to obtain the analysis results
+    data_analysis_result = runnable_function(abstraction)
+
+    # run the summary creation chain to convert the results of the data analysis to natural language
+    summary = summariser_chain.invoke({ "query" : query, "results" : data_analysis_result })
+
+    # return the plotting function and the natural language summary to the frontend
+    return { "plot_code" : plot_code, "summary" : summary }
 
   except Exception as e:
     raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
