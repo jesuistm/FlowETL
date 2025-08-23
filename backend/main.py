@@ -4,6 +4,7 @@ from backend.pydantic_models import Plan, DataAnalystRequest, DataEngineerReques
 import pandas as pd
 import json
 import numpy as np
+from backend.functions import *
 import logging
 import os
 import matplotlib.pyplot as plt
@@ -269,6 +270,7 @@ INSTRUCTIONS:
 5. Use descriptive node IDs that clearly indicate their purpose
 6. Include all required fields in the JSON output
 7. Ensure the JSON is valid and follows the exact schema shown in the documentation
+8. Keep any generated functions as simple as possible, while still achieving the task.
 
 OUTPUT FORMAT INSTRUCTIONS
 {format_instructions}
@@ -295,10 +297,15 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     # reconstruct DataFrame from JSON
     abstraction = pd.DataFrame(json.loads(request.abstraction))
 
-    # extract the source dataset name 
-    source_dataset = request.source_dataset
+    logging.info("Received complete abstraction")
 
-    # extract task description from request payload
+    # take the min between 10% sample of the abstraction or 25 rows - this makes processing quicker
+    # we assume that the plan generated will be successfully applied to the entire dataset
+    sample_size = min(25, int(len(abstraction) * 0.1)) 
+    sampled_abstraction = abstraction.sample(n=sample_size).to_json()
+
+    # extract the source dataset name and task description from request payload
+    source_dataset = request.source_dataset
     task_description = request.task_description
 
     # invoke the plan construction chain
@@ -306,10 +313,51 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
       "task_description": task_description, 
       "documentation" : flowetl_documentation, 
       "source_dataset" : source_dataset,
-      "dataset" : abstraction
+      "dataset" : sampled_abstraction
     })
 
-    return { "plan" : result }
+    logging.info("Successfully invoked the data engineering chain")
+
+    # extract the data engineering pipeline and the dataset schema from the generated plan
+    pipeline = result['pipeline']
+    features_schema = result['source_schema']
+
+    logging.info("Successfully extracted pipeline and schema from chain")
+    logging.info(json.dumps(pipeline, indent=2))
+    logging.info(json.dumps(features_schema, indent=2))
+
+    # apply the pipeline onto the abstracted dataset
+    for node in pipeline:
+
+      # for the current node, extract all possible configuration attributes
+      node_type = node.get('node_type', None)
+      node_id = node.get('node_id', None)
+      columns = node.get('columns', None)
+      source = node.get('source', None)
+      target = node.get('target', None)
+      function = node.get('function', None)
+      drop_source = node.get('drop_source', None)
+
+      logging.info(f"Processing node with ID : {node_id}")
+
+      # based on the node type, call one of the functions and configure it using the node's attributes
+      if node_type == "MissingValues":
+        abstraction = missing_values(columns=columns, abstraction=abstraction, features_schema=features_schema)
+
+      if node_type == "Duplicates":
+        abstraction = duplicate_instances(abstraction=abstraction)
+
+      if node_type == "OutliersAndAnomalies":
+        abstraction = outliers_anomalies(columns=columns, abstraction=abstraction, features_schema=features_schema)
+
+      if node_type == "DeriveColumn":
+        abstraction = derive_column(abstraction=abstraction, source=source, target=target, function=function, drop_source=drop_source)
+
+      logging.info("Successfully applied the node")
+
+    logging.info("Applied the pipeline successfully, sending the processed abstraction to frontend")
+
+    return { "processed_abstraction" : abstraction }
 
   except Exception as e:
     raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
@@ -324,7 +372,7 @@ Assumptions: Dataset is clean and analysis-ready. No data wrangling needed.
 
 **IMPORTANT**: Do not include any comments in the generated code.
 
-DATASET
+DATASET : A sample of the dataset which the code will be executed on.
 {dataset}
 
 QUERY
@@ -332,7 +380,7 @@ QUERY
 
 ## TASK
 Generate two function types based on query:
-- **analysis_code**: `def analyze_data(df):` - processes data, returns structured results
+- **analysis_code**: `def analyze_data(df):` - processes data, returns structured results. 
 - **plot_code**: `def plot_data(df):` - creates matplotlib visualization (optional). This function should return the Matplotlib figure
 
 ## QUERY CLASSIFICATION

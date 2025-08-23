@@ -99,7 +99,12 @@ def main():
                 response_body = response.json()
                 if response.status_code == 200:
                     st.success("Plan generated but not validated")
-                    st.json(response_body["plan"])
+                    
+                    processed_dataframe = response_body.get('processed_abstraction', None)
+
+                    # render the processed dataframe to screen
+                    st.dataframe(pd.DataFrame(json.loads(processed_dataframe)))
+                    
                 else:
                     # FastAPI uses HTTPException by default, hence we assume an error returns the "detail" key
                     st.error(response_body.get("detail"))
@@ -125,16 +130,8 @@ def main():
             # abstract the input dataset to a pandas dataframe
             abstraction = abstract_dataset(input_dataset)
 
-            # take the min between 10% sample of the abstraction or 25 rows - this makes processing quicker
-            # we assume that the plan generated will be successfully applied to the entire dataset
-            sample_size = min(25, int(len(abstraction) * 0.1)) 
-            sampled_abstraction = abstraction.sample(n=sample_size).to_json()
-
             try:
-                response = requests.post(
-                    "http://localhost:8000/analyze", 
-                    json={ "abstraction": sampled_abstraction, "query": query }
-                )
+                response = requests.post("http://localhost:8000/analyze", json={ "abstraction": abstraction, "query": query })
 
                 response_body = response.json()
                 if response.status_code == 200:
