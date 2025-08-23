@@ -24,7 +24,7 @@ key = os.environ["OPENAI_API_KEY"]
 app = FastAPI()
 
 # setup OpenAI client
-llm = ChatOpenAI(api_key=key,  model="gpt-5",  temperature=0.0)
+llm = ChatOpenAI(api_key=key,  model="gpt-4.1",  temperature=0.0)
 
 # configure API middleware
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -172,7 +172,7 @@ Change column name without transformation.
 
 - Set: `source`, `target`
 - No `function` needed
-- Set: `drop_source=false` to simply rename the column
+- Set: `drop_source=false`
 
 #### 6. Drop Column
 
@@ -251,7 +251,7 @@ Container for the entire transformation pipeline.
 
 # prompt include both the FlowETL Functions documentation and the task instruction for the data engineering LLM
 data_engineering_system_prompt = """
-You are a data engineering expert tasked with creating transformation plans using the available FlowETL Functions.
+You are a data engineering expert tasked with creating transformation plans using FlowETL Functions.
 
 DATASET:
 {dataset}
@@ -263,16 +263,26 @@ TASK DESCRIPTION:
 {task_description}
 
 INSTRUCTIONS:
-1. Analyze the task description and knowledge base to understand the data transformation requirements
-2. Using the FlowETL supported data types, infer a plausible schema for the input dataset
-3. Create a complete JSON transformation plan using FlowETL Functions
-4. Follow the node ordering rules from the documentation
-5. Use descriptive node IDs that clearly indicate their purpose
-6. Include all required fields in the JSON output
-7. Ensure the JSON is valid and follows the exact schema shown in the documentation
-8. Keep any generated functions as simple as possible, while still achieving the task.
+1. Analyze the task description and dataset to understand the transformation requirements.
+2. Infer a plausible schema for the input dataset. Each column must be assigned one of: Number, String, Date, Boolean, Complex.
+3. Create a valid JSON transformation plan following the FlowETL Functions schema.
+4. The JSON MUST include the following fields:
+  - plan_id (string)
+  - task_summary (string)
+  - source_dataset (string)
+  - source_schema (object, column:type mapping)
+  - pipeline (list of nodes)
+5. The pipeline must follow this order:
+  - MissingValues -> Duplicates -> OutliersAndAnomalies -> DeriveColumn
+6. Each node must have:
+  - node_id: descriptive, unique identifier
+  - node_type: one of [MissingValues, Duplicates, OutliersAndAnomalies, DeriveColumn]
+  - required parameters exactly as documented
+7. Node transformations must only reference existing columns.
+8. Use simple lambda functions when required, otherwise prefer built-in strategies.
+9. The output must be valid JSON with no comments, explanations, or extra text.
 
-OUTPUT FORMAT INSTRUCTIONS
+OUTPUT FORMAT INSTRUCTIONS:
 {format_instructions}
 
 Generate a transformation plan for the {source_dataset} dataset:
@@ -353,11 +363,11 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
       if node_type == "DeriveColumn":
         abstraction = derive_column(abstraction=abstraction, source=source, target=target, function=function, drop_source=drop_source)
 
-      logging.info("Successfully applied the node")
+      logging.info(f"Successfully applied the node, {len(abstraction.index)}")
 
     logging.info("Applied the pipeline successfully, sending the processed abstraction to frontend")
 
-    return { "processed_abstraction" : abstraction }
+    return { "processed_abstraction" : abstraction.to_json(orient='records') } # serialise the df by converting it to json
 
   except Exception as e:
     raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")

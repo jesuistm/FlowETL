@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 # imports for type hints 
-from typing import Any, Optional, List
+from typing import Any, Optional, List, Union, Dict, Literal
 from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 
@@ -46,6 +46,7 @@ def abstract_dataset(dataset: UploadedFile) -> Any:
         # intitalise a pandas dataframe from the abstracted dataset contents 
         return pd.DataFrame(abstraction_rows, columns=abstraction_headers)
 
+    
 def main():
     """Run the frontend application"""
 
@@ -78,11 +79,6 @@ def main():
             # abstract the input dataset to a pandas dataframe
             abstraction = abstract_dataset(input_dataset)
 
-            # take the min between 10% sample of the abstraction or 25 rows - this makes processing quicker
-            # we assume that the plan generated will be successfully applied to the entire dataset
-            sample_size = min(25, int(len(abstraction) * 0.1)) 
-            sampled_abstraction = abstraction.sample(n=sample_size).to_json()
-
             # extract the uploaded dataset name
             dataset_name = input_dataset.name
 
@@ -91,20 +87,40 @@ def main():
                     "http://localhost:8000/transform", 
                     json={
                         "source_dataset" : dataset_name,
-                        "abstraction": sampled_abstraction, 
+                        "abstraction": abstraction.to_json(), 
                         "task_description": task_description
                     }
                 )
 
                 response_body = response.json()
                 if response.status_code == 200:
-                    st.success("Plan generated but not validated")
                     
-                    processed_dataframe = response_body.get('processed_abstraction', None)
+                    processed_dataframe = pd.DataFrame(json.loads(response_body.get('processed_abstraction', None)))
 
-                    # render the processed dataframe to screen
-                    st.dataframe(pd.DataFrame(json.loads(processed_dataframe)))
-                    
+                    dataset_type = dataset_name.split(".")[-1] # either 'csv' or 'json'
+
+                    if dataset_type == "csv":
+                        # download button for processed dataframe
+                        CSV = processed_dataframe.to_csv(index=False).encode("utf-8")
+                        st.download_button( label="📥 Download", data=CSV, file_name=f"output_{dataset_name}", mime="text/csv" )
+
+                        # render the processed dataframe to screen
+                        st.dataframe(processed_dataframe.head())
+
+                    if dataset_type == "json":
+
+                        # convert the abstraction back to a list json objects
+                        dictionaries = []
+                        for _, row in processed_dataframe.iterrows():
+                            row_dict = {col: val for col, val in row.items() if val != '---'}
+                            dictionaries.append(row_dict)
+
+                        JSON = json.dumps(dictionaries, indent=2)
+                        st.download_button( label="📥 Download", data=JSON, file_name=f"output_{dataset_name}", mime="application/json" )
+                        
+                        # render the top 5 objects in the transformed list of json objects
+                        st.json(dictionaries[ : min(10, len(dictionaries))])
+
                 else:
                     # FastAPI uses HTTPException by default, hence we assume an error returns the "detail" key
                     st.error(response_body.get("detail"))
@@ -131,7 +147,7 @@ def main():
             abstraction = abstract_dataset(input_dataset)
 
             try:
-                response = requests.post("http://localhost:8000/analyze", json={ "abstraction": abstraction, "query": query })
+                response = requests.post("http://localhost:8000/analyze", json={ "abstraction": abstraction.to_json(), "query": query })
 
                 response_body = response.json()
                 if response.status_code == 200:
