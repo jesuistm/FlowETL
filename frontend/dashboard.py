@@ -86,9 +86,9 @@ def main():
                 response = requests.post(
                     "http://localhost:8000/transform", 
                     json={
-                        "source_dataset" : dataset_name,
+                        "dataset_name" : dataset_name,
                         "abstraction": abstraction.to_json(), 
-                        "task_description": task_description
+                        "task": task_description
                     }
                 )
 
@@ -147,7 +147,7 @@ def main():
             abstraction = abstract_dataset(input_dataset)
 
             try:
-                response = requests.post("http://localhost:8000/analyze", json={ "abstraction": abstraction.to_json(), "query": query })
+                response = requests.post("http://localhost:8000/analyze", json={ "abstraction": abstraction.to_json(), "task": query })
 
                 response_body = response.json()
                 if response.status_code == 200:

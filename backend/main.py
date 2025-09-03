@@ -1,47 +1,110 @@
+import json
+import logging
+from typing import Any, Dict, Literal
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from backend.pydantic_models import Plan, DataAnalystRequest, DataEngineerRequest, Analysis
-import pandas as pd
-import json
-import numpy as np
+from langgraph.graph import END, START, StateGraph
+
 from backend.functions import *
+from backend.models import DataAnalystRequest, DataEngineerRequest, GraphState
 from backend.prompts import *
-import logging
-import os
-import matplotlib.pyplot as plt
-from dotenv import load_dotenv
-from typing import Dict, Any
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
+from backend.chains_utils import *
 
-# set logging to DEBUG mode
+
 logging.basicConfig(level=logging.INFO)
-
-# load and extract environment variable
-load_dotenv()
-key = os.environ["OPENAI_API_KEY"]
-
 app = FastAPI()
-
-# setup OpenAI client
-llm = ChatOpenAI(api_key=key,  model="gpt-4.1",  temperature=0.0)
-
-# configure API middleware
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-# setup data engineering output parser to follow pydantic schema 
-data_engineering_output_parser = JsonOutputParser(pydantic_object=Plan)
 
-# define data engineering prompt builder
-data_engineering_prompt_builder = PromptTemplate( 
-  template=data_engineering_system_prompt, 
-  input_variables=["task_description", "documentation", "dataset", "source_dataset"], 
-  partial_variables={"format_instructions": data_engineering_output_parser.get_format_instructions()} 
-) 
+def planner(state: GraphState) -> GraphState:
 
-# define data engineering LangChain chain
-data_engineering_chain = data_engineering_prompt_builder | llm | data_engineering_output_parser
+  logging.info(f"Entered planner, iteration : {state.get("iterations", 0)}")
+
+  # extract any feedback from the previous validation round
+  feedback = state.get("validation", {})
+  feedback_text = json.dumps(feedback, ensure_ascii=False) if feedback else "None"
+
+  # extract artifacts required by the planning agent
+  task = state.get("task", None)
+  dataset_name = state.get("dataset_name", None) # NOTE : this is the name of the source dataset, not the actual dataset itself
+  abstraction = state.get("abstraction", None)
+
+  # assemble the prompt and invoke the plan generation chain
+  result = data_engineering_chain.invoke({ 
+    "task": task, 
+    "documentation" : flowetl_documentation, 
+    "dataset_name" : dataset_name,
+    "abstraction" : abstraction,
+    "feedback" : feedback_text
+  })
+
+  # extract the pipeline of flowetl functions generated and update the graph state
+  next_state = dict(state)
+  next_state["pipeline"] = result['pipeline']
+  next_state["flowetl_schema"] = result['flowetl_schema']
+
+  logging.info(f"Exited planner, iteration : {next_state.get("iterations", 0)}")
+  return next_state
+
+
+def validator(state : GraphState) -> GraphState:
+
+  logging.info(f"Entered validator, iteration : {state.get("iterations", 0)}")
+
+  # extract required artifacts for validation from previous state
+  task = state.get("task", None)
+  pipeline = state.get("pipeline", None)
+  flowetl_schema = state.get("flowetl_schema")
+
+  # assemble validation prompt and extract any generated feedback
+  result = plan_validation_chain.invoke({ "task": task,  "flowetl_schema" : flowetl_schema, "pipeline" : pipeline })
+
+  # update the state and return
+  next_state = dict(state)
+  next_state["validation"] = result['validation']
+
+  # check if the validator spotted any errors, if none then we exit the graph
+  errors = result["validation"].get("errors", [])
+  if errors:
+    iters = next_state.get("iterations", 0)
+    next_state["iterations"] = iters + 1
+
+  logging.info(f"Exited validator, iteration : {state.get("iterations", 0)}")
+
+  return next_state
+
+
+# this function enables routing within the langgraph based on the output of the validator node
+def router(state: GraphState) -> Literal["fix", "done", "unsolvable"]:
+  validation = state.get("validation", {})
+  errors = validation.get("errors", [])
+  iters = state.get("iterations", 0)
+
+  if errors:
+    if iters <= 3: # allow 3 iterations of graph before failing 
+      return "fix"
+    else:
+      # a valid plan could not be generated
+      return "unsolvable"
+  
+  # plan is validated
+  return "done"
+
+def build_graph():
+  graph = StateGraph(GraphState)
+  graph.add_node("planner", planner)
+  graph.add_node("validator", validator)
+
+  graph.add_edge(START, "planner")
+  graph.add_edge("planner", "validator")
+  graph.add_conditional_edges("validator", router, {"fix": "planner", "done": END, "unsolvable" : END})
+  
+  return graph.compile()
+
 
 @app.post("/transform")
 async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
@@ -57,26 +120,20 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     sampled_abstraction = abstraction.sample(n=sample_size).to_json()
 
     # extract the source dataset name and task description from request payload
-    source_dataset = request.source_dataset
-    task_description = request.task_description
+    dataset_name = request.dataset_name
+    task = request.task
 
-    # invoke the plan construction chain
-    result = data_engineering_chain.invoke({ 
-      "task_description": task_description, 
-      "documentation" : flowetl_documentation, 
-      "source_dataset" : source_dataset,
-      "dataset" : sampled_abstraction
-    })
+    # configure input for the langgraph
+    inputs: GraphState = { "task": task, "dataset_name": dataset_name, "abstraction" : sampled_abstraction, "iterations": 1 }
 
-    logging.info("Successfully invoked the data engineering chain")
+    logging.info("Triggered graph")
+    final_state = build_graph().invoke(inputs)
 
-    # extract the data engineering pipeline and the dataset schema from the generated plan
-    pipeline = result['pipeline']
-    features_schema = result['source_schema']
-
-    logging.info("Successfully extracted pipeline and schema from chain")
-    logging.info(json.dumps(pipeline, indent=2))
-    logging.info(json.dumps(features_schema, indent=2))
+    logging.info("Validated plan")
+    pipeline = final_state.get("pipeline") # we expect this to not fail, since the validator and pydantic models should work ok
+    flowetl_schema = final_state.get("flowetl_schema")
+    logging.info(json.dumps(pipeline, indent=2, ensure_ascii=False))
+    logging.info(json.dumps(flowetl_schema, indent=2, ensure_ascii=False))
 
     # apply the pipeline onto the abstracted dataset
     for node in pipeline:
@@ -94,18 +151,18 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
 
       # based on the node type, call one of the functions and configure it using the node's attributes
       if node_type == "MissingValues":
-        abstraction = missing_values(columns=columns, abstraction=abstraction, features_schema=features_schema)
+        abstraction = missing_values(columns=columns, abstraction=abstraction, features_schema=flowetl_schema)
 
       if node_type == "Duplicates":
         abstraction = duplicate_instances(abstraction=abstraction)
 
       if node_type == "OutliersAndAnomalies":
-        abstraction = outliers_anomalies(columns=columns, abstraction=abstraction, features_schema=features_schema)
+        abstraction = outliers_anomalies(columns=columns, abstraction=abstraction, features_schema=flowetl_schema)
 
       if node_type == "DeriveColumn":
         abstraction = derive_column(abstraction=abstraction, source=source, target=target, function=function, drop_source=drop_source)
 
-      logging.info(f"Successfully applied the node, {len(abstraction.index)}")
+      logging.info(f"Successfully applied the node")
 
     logging.info("Applied the pipeline successfully, sending the processed abstraction to frontend")
 
@@ -114,28 +171,6 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
   except Exception as e:
     raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
 
-
-# define the output parser for the data analysis task
-data_analysis_output_parser = JsonOutputParser(pydantic_object=Analysis)
-
-# define the prompt builder for the data analysis task
-data_analysis_prompt_builder = PromptTemplate( 
-  template=data_analysis_system_prompt, 
-  input_variables=["dataset", "query"], 
-  partial_variables={"format_instructions": data_analysis_output_parser.get_format_instructions()} 
-) 
-
-# define the data analysis results summary prompt builder
-data_analysis_summary_prompt_builder = PromptTemplate( 
-  template=data_analysis_summary_system_prompt, 
-  input_variables=["results", "query"], 
-) 
-
-# define the data analysis Langchain chain
-data_analysis_chain = data_analysis_prompt_builder | llm | data_analysis_output_parser
-
-# define the query result summarise Langchain chain
-summariser_chain = data_analysis_summary_prompt_builder | llm | StrOutputParser()
 
 @app.post("/analyze")
 def analyze_data(request : DataAnalystRequest) -> Dict[str, Any]:
