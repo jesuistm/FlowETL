@@ -14,15 +14,14 @@ from backend.models import DataAnalystRequest, DataEngineerRequest, GraphState
 from backend.prompts import *
 from backend.chains_utils import *
 
-
-logging.basicConfig(level=logging.INFO)
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s\n")
 
 def planner(state: GraphState) -> GraphState:
 
-  logging.info(f"Entered planner, iteration : {state.get("iterations", 0)}")
+  logging.info(f"entered planner - iteration {state.get("iterations", -1000)}")
+  logging.info(f"pipeline - {json.dumps(state.get("pipeline", []), indent=2)}")
 
   # extract any feedback from the previous validation round
   feedback = state.get("validation", {})
@@ -30,7 +29,7 @@ def planner(state: GraphState) -> GraphState:
 
   # extract artifacts required by the planning agent
   task = state.get("task", None)
-  dataset_name = state.get("dataset_name", None) # NOTE : this is the name of the source dataset, not the actual dataset itself
+  dataset_name = state.get("dataset_name", None) 
   abstraction = state.get("abstraction", None)
 
   # assemble the prompt and invoke the plan generation chain
@@ -47,13 +46,13 @@ def planner(state: GraphState) -> GraphState:
   next_state["pipeline"] = result['pipeline']
   next_state["flowetl_schema"] = result['flowetl_schema']
 
-  logging.info(f"Exited planner, iteration : {next_state.get("iterations", 0)}")
+  logging.info(f"exiting planner. post-feedback pipeline - {json.dumps(next_state.get("pipeline", []), indent=2)}")
   return next_state
 
 
 def validator(state : GraphState) -> GraphState:
 
-  logging.info(f"Entered validator, iteration : {state.get("iterations", 0)}")
+  logging.info(f"entered validator - iteration {state.get("iterations", 0)}")
 
   # extract required artifacts for validation from previous state
   task = state.get("task", None)
@@ -67,32 +66,34 @@ def validator(state : GraphState) -> GraphState:
   next_state = dict(state)
   next_state["validation"] = result['validation']
 
+  logging.info(f"validation outcome - {json.dumps(next_state.get("validation", {}), indent=2)}")
+
   # check if the validator spotted any errors, if none then we exit the graph
   errors = result["validation"].get("errors", [])
   if errors:
     iters = next_state.get("iterations", 0)
     next_state["iterations"] = iters + 1
 
-  logging.info(f"Exited validator, iteration : {state.get("iterations", 0)}")
-
+  logging.info(f"exiting validator")
   return next_state
 
 
 # this function enables routing within the langgraph based on the output of the validator node
-def router(state: GraphState) -> Literal["fix", "done", "unsolvable"]:
+def router(state: GraphState) -> Literal["ERROR", "DONE", "FAIL"]:
   validation = state.get("validation", {})
   errors = validation.get("errors", [])
   iters = state.get("iterations", 0)
 
   if errors:
     if iters <= 3: # allow 3 iterations of graph before failing 
-      return "fix"
+      return "ERROR"
     else:
-      # a valid plan could not be generated
-      return "unsolvable"
+      state["exit_reason"] = "FAIL"
+      return "FAIL"
   
   # plan is validated
-  return "done"
+  state["exit_reason"] = "DONE"
+  return "DONE"
 
 def build_graph():
   graph = StateGraph(GraphState)
@@ -101,7 +102,7 @@ def build_graph():
 
   graph.add_edge(START, "planner")
   graph.add_edge("planner", "validator")
-  graph.add_conditional_edges("validator", router, {"fix": "planner", "done": END, "unsolvable" : END})
+  graph.add_conditional_edges("validator", router, { "ERROR": "planner", "DONE": END, "FAIL" : END })
   
   return graph.compile()
 
@@ -112,7 +113,7 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     # reconstruct DataFrame from JSON
     abstraction = pd.DataFrame(json.loads(request.abstraction))
 
-    logging.info("Received complete abstraction")
+    logging.info("received complete abstraction")
 
     # take the min between 10% sample of the abstraction or 25 rows - this makes processing quicker
     # we assume that the plan generated will be successfully applied to the entire dataset
@@ -126,13 +127,21 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     # configure input for the langgraph
     inputs: GraphState = { "task": task, "dataset_name": dataset_name, "abstraction" : sampled_abstraction, "iterations": 1 }
 
-    logging.info("Triggered graph")
+    logging.info("triggering planner-validator graph")
     final_state = build_graph().invoke(inputs)
 
-    logging.info("Validated plan")
+    # check whether the planner and validator failed to synthetise a plan
+    exit_reason = final_state.get("exit_reason", None)
+    if exit_reason and exit_reason == "FAIL":
+      logging.error("plan could not be generated")
+      raise Exception("plan could not be generated within bounded iterations")
+
     pipeline = final_state.get("pipeline") # we expect this to not fail, since the validator and pydantic models should work ok
     flowetl_schema = final_state.get("flowetl_schema")
+
+    logging.info("validated plan")
     logging.info(json.dumps(pipeline, indent=2, ensure_ascii=False))
+    logging.info("flowetl schema")
     logging.info(json.dumps(flowetl_schema, indent=2, ensure_ascii=False))
 
     # apply the pipeline onto the abstracted dataset
@@ -147,7 +156,7 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
       function = node.get('function', None)
       drop_source = node.get('drop_source', None)
 
-      logging.info(f"Processing node with ID : {node_id}")
+      logging.info(f"processing node with ID : {node_id}")
 
       # based on the node type, call one of the functions and configure it using the node's attributes
       if node_type == "MissingValues":
@@ -162,14 +171,14 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
       if node_type == "DeriveColumn":
         abstraction = derive_column(abstraction=abstraction, source=source, target=target, function=function, drop_source=drop_source)
 
-      logging.info(f"Successfully applied the node")
+      logging.info(f"successfully applied the node")
 
-    logging.info("Applied the pipeline successfully, sending the processed abstraction to frontend")
+    logging.info("applied the pipeline successfully")
 
-    return { "processed_abstraction" : abstraction.to_json(orient='records') } # serialise the df by converting it to json
+    return { "processed_abstraction" : abstraction.to_json(orient='records') } 
 
   except Exception as e:
-    raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
+    raise HTTPException(status_code=400, detail=f"failed to process data: {str(e)}")
 
 
 @app.post("/analyze")

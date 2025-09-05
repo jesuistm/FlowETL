@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Any, Dict, List, Union
 from sklearn.ensemble import IsolationForest
+import logging 
 
 def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, features_schema : Dict[str, str]) -> pd.DataFrame:
     """
@@ -35,7 +36,9 @@ def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, feature
     - `forward_fill`: Forward fill missing values
     - `backward_fill`: Backward fill missing values
     """
-    
+
+    logging.info("entering missing_values handler")
+
     # create a copy to avoid modifying the original dataframe
     abstraction = abstraction.copy()
     
@@ -46,6 +49,7 @@ def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, feature
         
         # skip if column was already dropped
         if column not in abstraction.columns:
+            logging.warning(f"column '{column}' not in abstraction, skipped.")
             continue
         
         # attempt to get the user-specified missing values for this column, otherwise 
@@ -61,6 +65,8 @@ def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, feature
         # read the user value for imputation if provided
         user_value = config.get('user_value', 'MISSINGVALUE')
 
+        logging.info(f"processing column - '{column}' | strategy - '{strategy}' | inferred column type - '{inferred_type}'")
+
         # create mask for missing values in this column
         # we use both isna and isin to handle the problem where "np.nan != np.nan" in Pandas
         missing_mask = abstraction[column].isna() | abstraction[column].isin(detectables)
@@ -68,67 +74,77 @@ def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, feature
         # handle the missing value based on the strategy
         if strategy == 'drop_row':
             abstraction = abstraction.drop(abstraction[missing_mask].index)
+            logging.info(f"dropped {missing_mask.sum()} rows")
 
         # check whether the current column is composed mainly of missing values, defined in the 'detectables' list
         elif strategy == 'drop_column' and ((abstraction[column].isna() | abstraction[column].isin(detectables)).sum() > len(abstraction[column]) / 2):
             # mark column for removal
             columns_to_drop.append(column)
+            logging.info(f"marked column '{column}' for removal - 50%+ missing values")
 
         elif strategy == 'impute_user':
             abstraction.loc[missing_mask, column] = user_value
+            logging.info(f"imputed column '{column}' using user-value '{user_value}")
 
         elif strategy == 'impute_auto':
-            
-            # impute automatically using the inferred FlowETL type for this column
-
+            # automatically impute missing values based on the column type inferred by flowetl
             if inferred_type == 'Number':
                 abstraction.loc[missing_mask, column] = 0
-                # the .fillna method targets the entire column, hence further cell iterations are redundant
+                logging.info(f"auto-imputed '{column}' with 0")
                 continue
 
             elif inferred_type == 'String':
                 abstraction.loc[missing_mask, column] = "N/A"
+                logging.info(f"auto-imputed '{column}' with 'N/A'")
                 continue
 
             elif inferred_type == 'Date':
                 abstraction.loc[missing_mask, column] = "1/1/2000"
+                logging.info(f"auto-imputed '{column}' with '1/1/2000'")
                 continue
 
             elif inferred_type == 'Boolean':
-                # replace with the majority value for this column
                 if not abstraction[column].mode().empty:
                     mode_value = abstraction[column].mode()[0]
                     abstraction.loc[missing_mask, column] = mode_value
+                    logging.info(f"auto-imputed '{column}' with mode '{mode_value}'")
                 continue
 
             elif inferred_type == 'Complex':
-                # use a general placeholder for complex column types
                 abstraction.loc[missing_mask, column] = "MISSINGVALUE"
+                logging.info(f"auto-imputed '{column}' with placeholder 'MISSINGVALUE'")
                 continue
 
         elif strategy == 'mean':
             mean_value = abstraction[column].mean()
             abstraction.loc[missing_mask, column] = mean_value
+            logging.info(f"imputed '{column}' with mean={mean_value}")
 
         elif strategy == 'median':
             median_value = abstraction[column].median()
             abstraction.loc[missing_mask, column] = median_value
+            logging.info(f"imputed '{column}' with median={median_value}")
 
         elif strategy == 'mode':
             if not abstraction[column].mode().empty:
                 mode_value = abstraction[column].mode()[0]
                 abstraction.loc[missing_mask, column] = mode_value
+                logging.info(f"imputed '{column}' with mode={mode_value}")
 
         elif strategy == 'forward_fill':
             abstraction[column] = abstraction[column].ffill()
+            logging.info(f"applied forward fill on '{column}'")
 
         elif strategy == 'backward_fill':
             abstraction[column] = abstraction[column].bfill()
+            logging.info(f"applied backward fill on '{column}'")
 
     # drop columns that were marked for removal
     if columns_to_drop:
         abstraction = abstraction.drop(columns=columns_to_drop)
+        logging.info(f"dropped columns {columns_to_drop}")
 
+    logging.info("exiting missing_values")
     return abstraction
 
 
@@ -324,7 +340,7 @@ def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target 
         return abstraction
 
     # operation 2 : split columns 
-    if isinstance(source, str) and isinstance(target, list):
+    elif isinstance(source, str) and isinstance(target, list):
         # apply function and split result into multiple columns
         split_data = abstraction[source].apply(eval(function))
         
@@ -344,8 +360,13 @@ def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target 
             abstraction = abstraction.drop(columns=[source])
         return abstraction
 
+    # operation 5 : rename column 
+    elif function is None and isinstance(source, str) and isinstance(target, str) and source != target:
+        abstraction = abstraction.rename(columns={source: target})
+        return abstraction
+    
     # operations 3 & 4 : create & transform columns 
-    if isinstance(source, str) and isinstance(target, str):
+    elif isinstance(source, str) and isinstance(target, str):
         # check if we're dealing with multiple source columns referenced in the function
         if '[' in str(function) and ']' in str(function):
             # we check if square brackets appear in lambda - meaning it must access multiple columns
@@ -358,13 +379,8 @@ def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target 
             abstraction = abstraction.drop(columns=[source])
         return abstraction
     
-    # operation 5 : rename column 
-    if function is None and isinstance(source, str) and isinstance(target, str) and source != target:
-        abstraction = abstraction.rename(columns={source: target})
-        return abstraction
-    
     # operation 6 : drop column 
-    if drop_source and (target is None and function is None):
+    elif drop_source and (target is None and function is None):
         abstraction = abstraction.drop(columns=source)
         return abstraction
     
