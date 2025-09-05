@@ -36,4 +36,4 @@ class GraphState(TypedDict, total=False):
     iterations: int = Field(description="Iterations through the producer-validator graph")                   
     flowetl_schema : Dict[str, str] = Field(description="Inferred flowetl_schema for the input abstraction, using native Pandas data types")
     dataset_name : str  = Field(description="Name of the dataset targeted by the plan")
-    exit_reason: Literal["ERROR", "DONE", "FAIL"] = Field("Attribute used to track the graph state.")
+    is_valid: bool = Field("Attribute used to check the validity of the plan")

@@ -46,6 +46,9 @@ def planner(state: GraphState) -> GraphState:
   next_state["pipeline"] = result['pipeline']
   next_state["flowetl_schema"] = result['flowetl_schema']
 
+  # if there is no feedback given, the plan is valid
+  next_state["is_valid"] = feedback is None
+
   logging.info(f"exiting planner. post-feedback pipeline - {json.dumps(next_state.get("pipeline", []), indent=2)}")
   return next_state
 
@@ -85,15 +88,15 @@ def router(state: GraphState) -> Literal["ERROR", "DONE", "FAIL"]:
   iters = state.get("iterations", 0)
 
   if errors:
-    if iters <= 3: # allow 3 iterations of graph before failing 
-      return "ERROR"
+    if iters <= 3:
+      # allow 3 iterations before failing the graph 
+      return "CONTINUE"
     else:
-      state["exit_reason"] = "FAIL"
-      return "FAIL"
-  
+      # graph run out of iterations to compute a valid plan
+      return "END"
+    
   # plan is validated
-  state["exit_reason"] = "DONE"
-  return "DONE"
+  return "END"
 
 def build_graph():
   graph = StateGraph(GraphState)
@@ -102,7 +105,7 @@ def build_graph():
 
   graph.add_edge(START, "planner")
   graph.add_edge("planner", "validator")
-  graph.add_conditional_edges("validator", router, { "ERROR": "planner", "DONE": END, "FAIL" : END })
+  graph.add_conditional_edges("validator", router, { "CONTINUE": "planner", "END": END })
   
   return graph.compile()
 
@@ -125,14 +128,14 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     task = request.task
 
     # configure input for the langgraph
-    inputs: GraphState = { "task": task, "dataset_name": dataset_name, "abstraction" : sampled_abstraction, "iterations": 1 }
+    inputs: GraphState = { "task": task, "dataset_name": dataset_name, "abstraction" : sampled_abstraction, "iterations": 1, "is_valid" : False }
 
     logging.info("triggering planner-validator graph")
     final_state = build_graph().invoke(inputs)
 
     # check whether the planner and validator failed to synthetise a plan
-    exit_reason = final_state.get("exit_reason", None)
-    if exit_reason and exit_reason == "FAIL":
+    is_valid = final_state.get("is_valid", False)
+    if not is_valid:
       logging.error("plan could not be generated")
       raise Exception("plan could not be generated within bounded iterations")
 
