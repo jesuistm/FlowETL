@@ -16,7 +16,7 @@ from backend.chains_utils import *
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s\n")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def planner(state: GraphState) -> GraphState:
 
@@ -24,9 +24,10 @@ def planner(state: GraphState) -> GraphState:
   logging.info(f"pipeline - {json.dumps(state.get("pipeline", []), indent=2)}")
 
   # extract any feedback from the previous validation round
-  feedback = state.get("validation", {})
+  feedback = state.get("errors", [])
   feedback_text = json.dumps(feedback, ensure_ascii=False) if feedback else "None"
 
+  logging.info(f"Within planner. Received following feedback from validator : {feedback}")
   # extract artifacts required by the planning agent
   task = state.get("task", None)
   dataset_name = state.get("dataset_name", None) 
@@ -47,7 +48,7 @@ def planner(state: GraphState) -> GraphState:
   next_state["flowetl_schema"] = result['flowetl_schema']
 
   # if there is no feedback given, the plan is valid
-  next_state["is_valid"] = feedback is None
+  next_state["is_valid"] = feedback == []
 
   logging.info(f"exiting planner. post-feedback pipeline - {json.dumps(next_state.get("pipeline", []), indent=2)}")
   return next_state
@@ -67,15 +68,18 @@ def validator(state : GraphState) -> GraphState:
 
   # update the state and return
   next_state = dict(state)
-  next_state["validation"] = result['validation']
+  validation =  result.get("validation", [])
+  next_state["validation"] = validation
 
-  logging.info(f"validation outcome - {json.dumps(next_state.get("validation", {}), indent=2)}")
+  logging.info(f"validation outcome - {json.dumps(validation, indent=2)}")
 
-  # check if the validator spotted any errors, if none then we exit the graph
-  errors = result["validation"].get("errors", [])
-  if errors:
+  # check if the validator spotted any validation, if none then we exit the graph
+  if len(validation) > 0:
     iters = next_state.get("iterations", 0)
     next_state["iterations"] = iters + 1
+  else:
+    # no validation returned by the validator, therefore the plan must be valid
+    next_state["is_valid"] = True
 
   logging.info(f"exiting validator")
   return next_state
@@ -84,10 +88,9 @@ def validator(state : GraphState) -> GraphState:
 # this function enables routing within the langgraph based on the output of the validator node
 def router(state: GraphState) -> Literal["ERROR", "DONE", "FAIL"]:
   validation = state.get("validation", {})
-  errors = validation.get("errors", [])
   iters = state.get("iterations", 0)
 
-  if errors:
+  if len(validation) > 0:
     if iters <= 3:
       # allow 3 iterations before failing the graph 
       return "CONTINUE"
@@ -135,6 +138,7 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
 
     # check whether the planner and validator failed to synthetise a plan
     is_valid = final_state.get("is_valid", False)
+
     if not is_valid:
       logging.error("plan could not be generated")
       raise Exception("plan could not be generated within bounded iterations")
