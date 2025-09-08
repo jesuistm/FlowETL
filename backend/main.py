@@ -14,6 +14,7 @@ from backend.models import DataAnalystRequest, DataEngineerRequest, GraphState
 from backend.prompts import *
 from backend.chains_utils import *
 
+MAX_RETRIES = 3
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -91,7 +92,7 @@ def router(state: GraphState) -> Literal["ERROR", "DONE", "FAIL"]:
   iters = state.get("iterations", 0)
 
   if len(validation) > 0:
-    if iters <= 3:
+    if iters <= MAX_RETRIES:
       # allow 3 iterations before failing the graph 
       return "CONTINUE"
     else:
