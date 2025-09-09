@@ -20,26 +20,31 @@ SCHEMA & COLUMNS
 - Columns dropped with drop_source=true cannot be referenced later.
 
 MISSINGVALUES NODE
-- strategy=impute_user → user_value required.
-- strategy=mean/median → column must be Number.
-- strategy=mode → column must be Number or String.
-- strategy=forward_fill/backward_fill → column must be sequential (e.g., Date).
+- strategy=impute_user requires user_value.
+- strategy=mean/median requires column must be Number.
+- strategy=mode requires column must be Number or String.
+- strategy=forward_fill/backward_fill requires column must be sequential (e.g., Date).
 
 DUPLICATES NODE
 - Must not contain parameters.
 
+DROPROWS NODE 
+- Condition must be input-agnostic: cannot reference dataset-specific constants.
+- Must be a lambda function taking a dataframe row.
+- Must take into account the datatype of the cell
+
 OUTLIERSANDANOMALIES NODE
 - normal_values required unless strategy=auto.
-- strategy=impute_user → user_value required.
-- strategy=mean/median → column must be Number.
-- strategy=mode → column must be Number or String.
+- strategy=impute_user requires user_value.
+- strategy=mean/median requires column must be Number.
+- strategy=mode requires column must be Number or String.
 
 DERIVECOLUMN NODE
 - function required for merge, split, create, transform.
 - function not allowed for rename, drop.
-- merge: multiple sources → one target.
-- split: one source → multiple targets.
-- drop_source=true → column cannot be used later.
+- merge: multiple sources to one target.
+- split: one source to multiple targets.
+- drop_source=true means column cannot be used later.
 
 PIPELINE CONSISTENCY
 - Respect node dependencies.
@@ -62,7 +67,6 @@ Respond in JSON with the following structure:
   "pipeline" : [ ... ]
 }}
 """
-
 
 data_analysis_system_prompt = """
 You are a Python data analyst generating executable code for pandas DataFrame queries.
@@ -216,6 +220,15 @@ Removes duplicate records from the dataset.
 - Detection: Row-by-row comparison
 - Handling: Automatic removal of duplicates
 - No additional parameters required
+
+### DropRow
+
+Drops rows that meet the specified condition.
+
+**Parameters**
+
+- `condition` : Pandas lambda function code snippet that evaluates to boolean result. True if the input
+row meets the condition, False otherwise. 
 
 ### `OutliersAndAnomalies`
 

@@ -4,6 +4,24 @@ from typing import Any, Dict, List, Union
 from sklearn.ensemble import IsolationForest
 import logging 
 
+
+def drop_rows(abstraction: pd.DataFrame, condition: str) -> pd.DataFrame:
+    """
+    Drop all rows within the abstraction that meet the input condition
+
+    **Parameters**
+    - `abstraction` : Pandas dataframe to be processed by this function
+    - `condition` : Pandas function which takes in a dataframe's row and returns a boolean value
+    """
+    abstraction = abstraction.copy()
+    
+    func = eval(condition) 
+    # compute boolean mask over the abstraction
+    mask = func(abstraction)
+    # drop rows where the mask is True
+    return abstraction[~mask]
+
+    
 def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, features_schema : Dict[str, str]) -> pd.DataFrame:
     """
     Handle missing values following the configuration specified within the plan
@@ -455,7 +473,7 @@ def _detect_outliers(series: pd.Series, normal_values: Union[str, List, Dict], i
             # create a safe namespace for evaluation
             namespace = {'series': series, 'pd': pd, 'np': np}
             # evaluate the condition - should return a boolean mask
-            normal_mask = eval(normal_values, {"__builtins__": {}}, namespace)
+            normal_mask = eval(normal_values, { "__builtins__": {} }, namespace)
             return ~normal_mask  # invert to get outlier mask
         except:
             # if evaluation fails, assume no outliers

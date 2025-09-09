@@ -69,10 +69,8 @@ def validator(state : GraphState) -> GraphState:
 
   # update the state and return
   next_state = dict(state)
-  validation =  result.get("validation", [])
+  validation =  result.get("validation", {})
   next_state["validation"] = validation
-
-  logging.info(f"validation outcome - {json.dumps(validation, indent=2)}")
 
   # check if the validator spotted any validation, if none then we exit the graph
   if len(validation) > 0:
@@ -163,6 +161,7 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
       target = node.get('target', None)
       function = node.get('function', None)
       drop_source = node.get('drop_source', None)
+      condition = node.get('condition', None)
 
       logging.info(f"processing node with ID : {node_id}")
 
@@ -178,6 +177,9 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
 
       if node_type == "DeriveColumn":
         abstraction = derive_column(abstraction=abstraction, source=source, target=target, function=function, drop_source=drop_source)
+
+      if node_type == "DropRow":
+        abstraction = drop_rows(abstraction=abstraction, condition=condition)
 
       logging.info(f"successfully applied the node")
 
