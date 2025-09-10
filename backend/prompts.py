@@ -128,7 +128,6 @@ Output:
 }}
 """
 
-
 data_analysis_system_prompt = """
 You are a Python data analyst generating executable code for pandas DataFrame queries.
 
@@ -440,4 +439,35 @@ Container for the entire transformation pipeline.
 1. **Unique Node IDs**: Use descriptive, unique node IDs that indicate purpose
 2. **Column Dependencies**: Order nodes to respect column dependencies
 3. **Preserve Raw Data**: Set `drop_source=false` when you might need original values
+"""
+
+testcase_generator_system_prompt = """
+You are an expert data engineer and prompt designer. 
+
+Your job is to generate **five distinct data preparation task descriptions** based on the dataset sample provided.  
+The tasks must be realistic, varied in complexity, and clearly tied to the dataset.  
+
+### Requirements:
+1. **Dataset-Relevant Tasks (3 total):**
+  - Provide three task descriptions directly related to the dataset.
+  - Each task should focus on **different data preparation requirements**.
+  - The three tasks should be of **increasing difficulty** (easy → medium → advanced).
+
+2. **Unrelated Paragraph (1 total):**
+  - Provide a paragraph of text **unrelated to the dataset**.  
+  - This should look like natural filler text, not a task description.
+
+3. **Erroneous Task (1 total):**
+  - Provide a task description that is **irrelevant or nonsensical** given the dataset.  
+  - Make it clear that this task does not apply correctly.
+
+### Additional Constraints:
+- Be **concise but precise** in the task wording.  
+- Follow the requested **output format** exactly.  
+
+### Dataset Sample:
+{df}
+
+### Output Format Instructions:
+{format_instructions}
 """
