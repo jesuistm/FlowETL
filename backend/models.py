@@ -38,3 +38,11 @@ class GraphState(TypedDict, total=False):
     flowetl_schema : Dict[str, str] = Field(description="Inferred flowetl_schema for the input abstraction, using native Pandas data types")
     dataset_name : str  = Field(description="Name of the dataset targeted by the plan")
     is_valid: bool = Field("Attribute used to check the validity of the plan")
+
+class TaskDescriptionTestcases(BaseModel):
+    """Each model response for a particular dataset will include the testcases below"""
+    easy: str = Field(description="Trivial data preparation task description") 
+    medium: str = Field(description="Average data preparation task description")
+    difficult: str = Field(description="Complex data preparation task description")
+    unrelated: str = Field(description="Unrelated paragraph")
+    erroneous: str = Field(description="Data preparation task description which is expected to fail")
