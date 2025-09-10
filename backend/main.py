@@ -151,39 +151,19 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     logging.info(json.dumps(flowetl_schema, indent=2, ensure_ascii=False))
 
     # apply the pipeline onto the abstracted dataset
-    for node in pipeline:
+    abstraction, errors = apply_pipeline(abstraction, flowetl_schema, pipeline)
 
-      # for the current node, extract all possible configuration attributes
-      node_type = node.get('node_type', None)
-      node_id = node.get('node_id', None)
-      columns = node.get('columns', None)
-      source = node.get('source', None)
-      target = node.get('target', None)
-      function = node.get('function', None)
-      drop_source = node.get('drop_source', None)
-      condition = node.get('condition', None)
 
-      logging.info(f"processing node with ID : {node_id}")
+    # TODO - make sure the errors (if any) are passed to the validation agent 
+    logging.error("""
 
-      # based on the node type, call one of the functions and configure it using the node's attributes
-      if node_type == "MissingValues":
-        abstraction = missing_values(columns=columns, abstraction=abstraction, features_schema=flowetl_schema)
 
-      if node_type == "Duplicates":
-        abstraction = duplicate_instances(abstraction=abstraction)
+    ############### IMPLEMENT THE TODO ##################
 
-      if node_type == "OutliersAndAnomalies":
-        abstraction = outliers_anomalies(columns=columns, abstraction=abstraction, features_schema=flowetl_schema)
 
-      if node_type == "DeriveColumn":
-        abstraction = derive_column(abstraction=abstraction, source=source, target=target, function=function, drop_source=drop_source)
+    """)
 
-      if node_type == "DropRow":
-        abstraction = drop_rows(abstraction=abstraction, condition=condition)
-
-      logging.info(f"successfully applied the node")
-
-    logging.info("applied the pipeline successfully")
+    
 
     return { "processed_abstraction" : abstraction.to_json(orient='records') } 
 

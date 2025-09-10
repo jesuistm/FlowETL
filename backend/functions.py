@@ -1,9 +1,64 @@
 import numpy as np
 import pandas as pd
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, Tuple
 from sklearn.ensemble import IsolationForest
 import logging 
 
+
+def apply_pipeline(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str],pipeline: List[Any]) -> Tuple[pd.DataFrame, List[Exception]]:
+    """
+    Apply the pipeline of flowetl functions to the input abstraction.
+    Collect any exceptions and return them alongside the result.
+    """
+
+    exceptions: List[Exception] = []
+
+    for node in pipeline:
+        try:
+            # extract configuration
+            node_type = node.get('node_type', None)
+            node_id = node.get('node_id', None)
+            columns = node.get('columns', None)
+            source = node.get('source', None)
+            target = node.get('target', None)
+            function = node.get('function', None)
+            drop_source = node.get('drop_source', None)
+            condition = node.get('condition', None)
+
+            logging.info(f"processing node with ID : {node_id}")
+
+            # route to appropriate function
+            if node_type == "MissingValues":
+                abstraction = missing_values(columns=columns, abstraction=abstraction, features_schema=flowetl_schema)
+
+            elif node_type == "Duplicates":
+                abstraction = duplicate_instances(abstraction=abstraction)
+
+            elif node_type == "OutliersAndAnomalies":
+                abstraction = outliers_anomalies(columns=columns, abstraction=abstraction, features_schema=flowetl_schema)
+
+            elif node_type == "DeriveColumn":
+                abstraction = derive_column(
+                    abstraction=abstraction,
+                    source=source,
+                    target=target,
+                    function=function,
+                    drop_source=drop_source,
+                )
+
+            elif node_type == "DropRow":
+                abstraction = drop_rows(abstraction=abstraction, condition=condition)
+
+            logging.info(f"successfully applied the node")
+
+        except Exception as e:
+            logging.error(f"Error in node {node.get('node_id', 'unknown')}: {e}")
+            exceptions.append(e)
+            # continue to next node instead of failing
+
+    logging.info("pipeline processing finished")
+    return abstraction, exceptions
+    
 
 def drop_rows(abstraction: pd.DataFrame, condition: str) -> pd.DataFrame:
     """
