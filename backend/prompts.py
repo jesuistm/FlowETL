@@ -221,15 +221,6 @@ Removes duplicate records from the dataset.
 - Handling: Automatic removal of duplicates
 - No additional parameters required
 
-### DropRow
-
-Drops rows that meet the specified condition.
-
-**Parameters**
-
-- `condition` : Pandas lambda function code snippet that evaluates to boolean result. True if the input
-row meets the condition, False otherwise. 
-
 ### `OutliersAndAnomalies`
 
 Detects and handles outliers and anomalies with column-specific strategies.
@@ -267,6 +258,15 @@ Detects and handles outliers and anomalies with column-specific strategies.
 - `mode`: Replace with column mode
 
 ## Feature Engineering Nodes
+
+### DropRow
+
+Drops rows that meet the specified condition.
+
+**Parameters**
+
+- `condition` : Pandas lambda function code snippet that evaluates to boolean result. True if the input
+row meets the condition, False otherwise. 
 
 ### `DeriveColumn`
 
