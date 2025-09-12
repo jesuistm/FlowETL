@@ -5,6 +5,89 @@ from sklearn.ensemble import IsolationForest
 import logging 
 
 
+def compute_missing_values_count(abstraction: pd.DataFrame, columns_config: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Compute and return the count of missing values for each column specified in the `columns_config` dictionary. 
+    Result follows a format like { column name : count of missing values }
+    """
+    return {
+        column : sum(abstraction[column].isna() | abstraction[column].isin(config.get('detect', [np.nan, ""]))) 
+        for column, config in columns_config.items()
+    }
+
+
+def compute_outlier_values_count(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str], columns_config: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Compute and return the count of outliers for each column specified in the `columns_config` dictionary
+    Result follows a format like { column name : count of outlier values }
+    """
+    return { 
+        column : sum(_detect_outliers(abstraction[column], config.get('normal_values', 'auto'), flowetl_schema.get(column, 'Complex'))) 
+        for column, config in columns_config.items()
+    }
+
+    
+def compute_data_quality(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str],pipeline: List[Any]) -> Dict[str, str]:
+    """
+    Compute a data quality report for the input abstraction. The report structure is as follows: 
+
+    Report contents:
+    - Dataset-wide information : dimensions, % of missing values, % of duplicate entries, % of outliers/anomalies 
+    - Column-specific information : flowetl type, % of missing values, % of outliers/anomalies
+    """
+
+    report = { 
+        'dimensions' : [abstraction.shape[0], abstraction.shape[1]], # number of rows, number of columns 
+        'missing_values_percent' : 0,
+        'duplicate_entries_percent' : (abstraction.duplicated().sum() / len(abstraction)) * 100,
+        'outlier_values_percent' : 0,
+        'column_specific' : {} 
+    }
+
+    # number of cells missing/outliers across the entire dataframe
+    missing_values_count = 0
+    outlier_values_count = 0
+
+    # compute column-specific data quality information
+    for node in pipeline:
+
+        # extract configuration
+        node_type = node.get('node_type', None)
+        columns = node.get('columns', None)
+
+        if node_type == "MissingValues":
+            # TODO - implement this
+            # need to return an object like { col1 : count of missing values, col2 : count of missing values, etc } 
+            # to compute the total number of missing cells, simply sum all the values in the response
+            result = compute_missing_values_count(abstraction, columns)
+            missing_values_count = sum(list(result.values()))
+
+            # convert each count in the results.values to a percentage of the number of rows in the abstraction
+            result = { key : (value/abstraction.shape[0]) * 100 for key, value in result.items() }
+
+            report['column_specific']['missing'] = result                                                               
+
+        if node_type == "OutliersAndAnomalies":
+            # TODO - implement this 
+            # similarly, here we must return an object like { col : count of outliers }
+            # to compute thr total number of missing cells, sum the values in the response
+            result = compute_outlier_values_count(abstraction, flowetl_schema, columns)
+            outlier_values_count = sum(list(result.values()))
+
+            # convert each count in the results.values to a percentage of the number of rows in the abstraction
+            result = { key : (value/abstraction.shape[0]) * 100 for key, value in result.items() }
+
+            report['column_specific']['outliers'] = result                                                              
+
+    # compute the percentage of dataframe cells considered missing
+    report['missing_values_percent'] = (missing_values_count/abstraction.size) * 100
+
+    # compute the percentage of outlier values in the dataframe
+    report['outlier_values_percent'] = (outlier_values_count/abstraction.size) * 100
+
+    return report
+
+
 def apply_pipeline(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str],pipeline: List[Any]) -> Tuple[pd.DataFrame, List[Exception]]:
     """
     Apply the pipeline of flowetl functions to the input abstraction.

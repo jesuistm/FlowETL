@@ -150,22 +150,25 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     logging.info("flowetl schema")
     logging.info(json.dumps(flowetl_schema, indent=2, ensure_ascii=False))
 
+    # compute the data quality report on the input (before-transformation) pipeline
+    data_quality_report_before = compute_data_quality(abstraction, flowetl_schema, pipeline)
+
     # apply the pipeline onto the abstracted dataset
     abstraction, errors = apply_pipeline(abstraction, flowetl_schema, pipeline)
 
 
     # TODO - make sure the errors (if any) are passed to the validation agent 
-    logging.error("""
+    logging.error("############### IMPLEMENT THE TODO ##################")
+    logging.error(f"Errors encountered : {errors}")
 
+    # compute the data quality report on the transformed dataframe
+    data_quality_report_after = compute_data_quality(abstraction, flowetl_schema, pipeline)
 
-    ############### IMPLEMENT THE TODO ##################
-
-
-    """)
-
-    
-
-    return { "processed_abstraction" : abstraction.to_json(orient='records') } 
+    return { 
+      "processed_abstraction" : abstraction.to_json(orient='records'),
+      "data-quality-before" : data_quality_report_before, 
+      "data-quality-after" : data_quality_report_after
+    } 
 
   except Exception as e:
     raise HTTPException(status_code=400, detail=f"failed to process data: {str(e)}")
