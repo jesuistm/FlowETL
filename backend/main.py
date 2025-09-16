@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 from typing import Any, Dict, Literal
 
 import matplotlib.pyplot as plt
@@ -17,55 +18,60 @@ from backend.chains_utils import *
 MAX_RETRIES = 3
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, filename=f"logs/{uuid.uuid4()}.logs", format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 def planner(state: GraphState) -> GraphState:
 
-  logging.info(f"entered planner - iteration {state.get("iterations", -1000)}")
-  logging.info(f"pipeline - {json.dumps(state.get("pipeline", []), indent=2)}")
+  logging_prefix = f"Planner [iteration {state['iterations']}"
+  logging.info(f"{logging_prefix} - Pipeline : {json.dumps(state.get("pipeline", []), indent=2)}")
 
   # extract any feedback from the previous validation round
   feedback = state.get("errors", [])
-  feedback_text = json.dumps(feedback, ensure_ascii=False) if feedback else "None"
+  feedback_text = json.dumps(feedback, ensure_ascii=False, indent=2) if feedback else None
 
-  logging.info(f"Within planner. Received following feedback from validator : {feedback}")
-  # extract artifacts required by the planning agent
-  task = state.get("task", None)
-  dataset_name = state.get("dataset_name", None) 
-  abstraction = state.get("abstraction", None)
+  logging.info(f"{logging_prefix} - {'No feedback received from Validator' if not feedback else feedback_text}")
 
-  # assemble the prompt and invoke the plan generation chain
-  result = data_engineering_chain.invoke({ 
-    "task": task, 
-    "documentation" : flowetl_documentation, 
-    "dataset_name" : dataset_name,
-    "abstraction" : abstraction,
-    "feedback" : feedback_text
-  })
+  if feedback:
+    # extract artifacts required by the planning agent
+    task = state.get("task", None)
+    dataset_name = state.get("dataset_name", None) 
+    abstraction = state.get("abstraction", None)
 
-  # extract the pipeline of flowetl functions generated and update the graph state
-  next_state = dict(state)
-  next_state["pipeline"] = result['pipeline']
-  next_state["flowetl_schema"] = result['flowetl_schema']
+    logging.info(f"{logging_prefix} - Generating new plan")
+
+    # assemble the prompt and invoke the plan generation chain
+    result = data_engineering_chain.invoke({ 
+      "task": task, "documentation" : flowetl_documentation, "dataset_name" : dataset_name, "abstraction" : abstraction, "feedback" : feedback_text 
+    })
+
+    # extract the pipeline of flowetl functions generated and update the graph state
+    next_state = dict(state)
+    next_state["pipeline"] = result['pipeline']
+    next_state["flowetl_schema"] = result['flowetl_schema']
 
   # if there is no feedback given, the plan is valid
   next_state["is_valid"] = feedback == []
 
-  logging.info(f"exiting planner. post-feedback pipeline - {json.dumps(next_state.get("pipeline", []), indent=2)}")
+  logging.info(f"{logging_prefix} - Graph state updated. Exiting Planner.")
   return next_state
 
 
 def validator(state : GraphState) -> GraphState:
 
-  logging.info(f"entered validator - iteration {state.get("iterations", 0)}")
+  logging_prefix = f"Validator [iteration {state['iterations']}"
 
   # extract required artifacts for validation from previous state
   task = state.get("task", None)
   pipeline = state.get("pipeline", None)
   flowetl_schema = state.get("flowetl_schema")
 
+  logging.info(f"{logging_prefix} - Initialising validation process")
+
   # assemble validation prompt and extract any generated feedback
   result = plan_validation_chain.invoke({ "task": task,  "flowetl_schema" : flowetl_schema, "pipeline" : pipeline })
+
+  logging.info(f"{logging_prefix} - Validation process complete")
 
   # update the state and return
   next_state = dict(state)
@@ -80,7 +86,7 @@ def validator(state : GraphState) -> GraphState:
     # no validation returned by the validator, therefore the plan must be valid
     next_state["is_valid"] = True
 
-  logging.info(f"exiting validator")
+  logging.info(f"{logging_prefix} - Graph state updated. Exiting Validator.")
   return next_state
 
 
@@ -139,7 +145,7 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     is_valid = final_state.get("is_valid", False)
 
     if not is_valid:
-      logging.error("plan could not be generated")
+      logging.error("plan could not be generated", exc_info=True)
       raise Exception("plan could not be generated within bounded iterations")
 
     pipeline = final_state.get("pipeline") # we expect this to not fail, since the validator and pydantic models should work ok
@@ -153,16 +159,19 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     # compute the data quality report on the input (before-transformation) pipeline
     data_quality_report_before = compute_data_quality(abstraction, flowetl_schema, pipeline)
 
+    logging.info(f"Data quality report before : {data_quality_report_before}")
+
     # apply the pipeline onto the abstracted dataset
     abstraction, errors = apply_pipeline(abstraction, flowetl_schema, pipeline)
 
-
     # TODO - make sure the errors (if any) are passed to the validation agent 
     logging.error("############### IMPLEMENT THE TODO ##################")
-    logging.error(f"Errors encountered : {errors}")
+    logging.error(f"Errors encountered : {errors}", exc_info=True)
 
     # compute the data quality report on the transformed dataframe
     data_quality_report_after = compute_data_quality(abstraction, flowetl_schema, pipeline)
+
+    logging.info(f"Data quality report after : {data_quality_report_after}")
 
     return { 
       "processed_abstraction" : abstraction.to_json(orient='records'),
@@ -179,10 +188,14 @@ def analyze_data(request : DataAnalystRequest) -> Dict[str, Any]:
   try:
     # extract the abstracted dataset sample and the user query
     abstraction = pd.DataFrame(json.loads(request.abstraction))
-    query = request.query
+    task = request.task
+
+    logging.info("Received query and dataset for analysis")
 
     # invoke the plan construction chain
-    result = data_analysis_chain.invoke({ "query" : query, "dataset" : abstraction })
+    result = data_analysis_chain.invoke({ "task" : task, "dataset" : abstraction })
+
+    logging.info("Compute the result for the dataset and query")
     
     analysis_code = result["analysis_code"]
     plot_code = result.get("plot_code", None)
@@ -196,7 +209,7 @@ def analyze_data(request : DataAnalystRequest) -> Dict[str, Any]:
     data_analysis_result = runnable_function(abstraction)
 
     # run the summary creation chain to convert the results of the data analysis to natural language
-    summary = summariser_chain.invoke({ "query" : query, "results" : data_analysis_result })
+    summary = summariser_chain.invoke({ "task" : task, "results" : data_analysis_result })
 
     # return the plotting function and the natural language summary to the frontend
     return { "plot_code" : plot_code, "summary" : summary }

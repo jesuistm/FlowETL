@@ -39,7 +39,7 @@ def compute_data_quality(abstraction: pd.DataFrame, flowetl_schema: Dict[str, st
     report = { 
         'dimensions' : [abstraction.shape[0], abstraction.shape[1]], # number of rows, number of columns 
         'missing_values_percent' : 0,
-        'duplicate_entries_percent' : (abstraction.duplicated().sum() / len(abstraction)) * 100,
+        'duplicate_entries_percent' : round((abstraction.duplicated().sum() / len(abstraction)) * 100,2),
         'outlier_values_percent' : 0,
         'column_specific' : {} 
     }
@@ -56,19 +56,17 @@ def compute_data_quality(abstraction: pd.DataFrame, flowetl_schema: Dict[str, st
         columns = node.get('columns', None)
 
         if node_type == "MissingValues":
-            # TODO - implement this
             # need to return an object like { col1 : count of missing values, col2 : count of missing values, etc } 
             # to compute the total number of missing cells, simply sum all the values in the response
             result = compute_missing_values_count(abstraction, columns)
             missing_values_count = sum(list(result.values()))
 
             # convert each count in the results.values to a percentage of the number of rows in the abstraction
-            result = { key : (value/abstraction.shape[0]) * 100 for key, value in result.items() }
+            result = { key : round((value/abstraction.shape[0]) * 100,2) for key, value in result.items() }
 
             report['column_specific']['missing'] = result                                                               
 
         if node_type == "OutliersAndAnomalies":
-            # TODO - implement this 
             # similarly, here we must return an object like { col : count of outliers }
             # to compute thr total number of missing cells, sum the values in the response
             result = compute_outlier_values_count(abstraction, flowetl_schema, columns)
@@ -80,10 +78,10 @@ def compute_data_quality(abstraction: pd.DataFrame, flowetl_schema: Dict[str, st
             report['column_specific']['outliers'] = result                                                              
 
     # compute the percentage of dataframe cells considered missing
-    report['missing_values_percent'] = (missing_values_count/abstraction.size) * 100
+    report['missing_values_percent'] = round((missing_values_count/abstraction.size) * 100, 2)
 
     # compute the percentage of outlier values in the dataframe
-    report['outlier_values_percent'] = (outlier_values_count/abstraction.size) * 100
+    report['outlier_values_percent'] = round((outlier_values_count/abstraction.size) * 100, 2)
 
     return report
 

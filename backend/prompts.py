@@ -79,15 +79,15 @@ Assumptions: Dataset is clean and analysis-ready. No data wrangling needed.
 DATASET : A sample of the dataset which the code will be executed on.
 {dataset}
 
-QUERY
+TASK
 {task}
 
 ## TASK
-Generate two function types based on query:
+Generate two function types based on task:
 - **analysis_code**: `def analyze_data(df):` - processes data, returns structured results. 
 - **plot_code**: `def plot_data(df):` - creates matplotlib visualization (optional). This function should return the Matplotlib figure
 
-## QUERY CLASSIFICATION
+## TASK CLASSIFICATION
 - **Analysis only**: calculate, average, sum, count, filter, find, statistics, summary, top, bottom
 - **Visualization only**: chart, plot, graph, visualize, distribution, histogram, bar, line, scatter
 - **Both**: "analyze and show", "summarize with chart", queries requesting data + visualization
@@ -103,7 +103,7 @@ Generate two function types based on query:
 - analysis_code returns meaningful data structures
 ```
 
-Generate executable code for the given query.
+Generate executable code for the given task.
 """
 
 data_analysis_summary_system_prompt = """

@@ -11,3 +11,5 @@ langchain-community
 scikit-learn
 matplotlib
 langgraph
+
+selenium

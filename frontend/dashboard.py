@@ -52,16 +52,19 @@ def main():
 
                 response_body = response.json()
                 if response.status_code == 200:
+
+                    json_response_df = response_body.get('processed_abstraction', None)
                     
-                    processed_dataframe = pd.DataFrame(json.loads(response_body.get('processed_abstraction', None)))
+                    if json_response_df:
+                        processed_dataframe = pd.DataFrame(json.loads(json_response_df))
 
-                    # download button for processed dataframe
-                    CSV = processed_dataframe.to_csv(index=False).encode("utf-8")
-                    st.download_button( label="📥 Download", data=CSV, file_name=f"output_{dataset_name}", mime="text/csv" )
+                        # download button for processed dataframe
+                        CSV = processed_dataframe.to_csv(index=False).encode("utf-8")
+                        st.download_button( label="📥 Download", data=CSV, file_name=f"output_{dataset_name}", mime="text/csv" )
 
-                    st.text("Preview of the transformed dataset")
-                    # render the processed dataframe to screen
-                    st.dataframe(processed_dataframe.head())
+                        st.text("Preview of the transformed dataset")
+                        # render the processed dataframe to screen
+                        st.dataframe(processed_dataframe.head())
 
                     # render the data quality reports for the uploaded dataset and let the user download them
                     # DQR -> data quality report
