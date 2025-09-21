@@ -4,9 +4,11 @@ import uuid
 from typing import Any, Dict, Literal
 
 import matplotlib.pyplot as plt
+from datetime import datetime
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from langgraph.graph import END, START, StateGraph
 
@@ -16,9 +18,62 @@ from backend.prompts import *
 from backend.chains_utils import *
 
 MAX_RETRIES = 3
+
+# file handler - write API logs to file
+file_handler = logging.FileHandler("app.log")
+file_handler.setLevel("INFO")
+file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+
+# console handler - write API logs to console
+console_handler = logging.StreamHandler()
+console_handler.setLevel("INFO")
+console_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+
+logger = logging.getLogger("flowetl_logger")
+logger.setLevel(logging.INFO)
+
+# prevent duplicate handlers in app reload
+if not logger.hasHandlers():
+  logger.addHandler(console_handler)
+
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# custom middleware for per-request logging. Each request gets its own log file
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+
+  async def dispatch(self, request: Request, call_next):
+        
+    # create unique log file for this request
+    # generate request ID as timestamp down to seconds + first segment of a UUID (e.g., T2025-09-21-15-45-30_ID8b7f8c5f)
+    # T_ refers to the request timestamp, ID refers to the request ID
+    request_id = f"T{datetime.now():%Y-%m-%d-%H-%M-%S}_ID{str(uuid.uuid4()).split('-')[0]}"
+    logfile = f"logs/{request_id}.log"
+
+    # create the file handler to allow write to log file
+    file_handler = logging.FileHandler(logfile)
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+
+    # attach file handler
+    logger.addHandler(file_handler)
+
+    try:
+      response = await call_next(request)
+    finally:
+      # detach & close file handler after request
+      logger.removeHandler(file_handler)
+      file_handler.close()
+
+    return response
+
+app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(
+  CORSMiddleware, 
+  allow_origins=["http://localhost:8000"], 
+  allow_credentials=True, 
+  allow_methods=["*"], 
+  allow_headers=["*"]
+)
 
 
 def planner(state: GraphState) -> GraphState:
@@ -123,7 +178,7 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     # reconstruct DataFrame from JSON
     abstraction = pd.DataFrame(json.loads(request.abstraction))
 
-    logging.info("received complete abstraction")
+    logger.info("received complete abstraction")
 
     # take the min between 10% sample of the abstraction or 25 rows - this makes processing quicker
     # we assume that the plan generated will be successfully applied to the entire dataset
@@ -156,7 +211,7 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     logging.info(json.dumps(flowetl_schema, indent=2, ensure_ascii=False))
 
     # compute the data quality report on the input (before-transformation) pipeline
-    data_quality_report_before = compute_data_quality(abstraction, flowetl_schema, pipeline)
+    data_quality_report_before = compute_data_quality(abstraction, flowetl_schema, pipeline, logger)
 
     logging.info(f"Data quality report before : {data_quality_report_before}")
 
@@ -168,7 +223,7 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     logging.error(f"Errors encountered : {errors}", exc_info=True)
 
     # compute the data quality report on the transformed dataframe
-    data_quality_report_after = compute_data_quality(abstraction, flowetl_schema, pipeline)
+    data_quality_report_after = compute_data_quality(abstraction, flowetl_schema, pipeline, logger)
 
     logging.info(f"Data quality report after : {data_quality_report_after}")
 

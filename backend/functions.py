@@ -27,7 +27,7 @@ def compute_outlier_values_count(abstraction: pd.DataFrame, flowetl_schema: Dict
     }
 
     
-def compute_data_quality(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str],pipeline: List[Any]) -> Dict[str, str]:
+def compute_data_quality(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str],pipeline: List[Any], logger) -> Dict[str, str]:
     """
     Compute a data quality report for the input abstraction. The report structure is as follows: 
 
@@ -35,6 +35,8 @@ def compute_data_quality(abstraction: pd.DataFrame, flowetl_schema: Dict[str, st
     - Dataset-wide information : dimensions, % of missing values, % of duplicate entries, % of outliers/anomalies 
     - Column-specific information : flowetl type, % of missing values, % of outliers/anomalies
     """
+
+    logger.info("Hello from compute_data_quality")
 
     report = { 
         'dimensions' : [abstraction.shape[0], abstraction.shape[1]], # number of rows, number of columns 
