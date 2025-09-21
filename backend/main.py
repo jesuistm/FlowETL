@@ -18,12 +18,12 @@ from backend.chains_utils import *
 MAX_RETRIES = 3
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:8000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-logging.basicConfig(level=logging.INFO, filename=f"logs/{uuid.uuid4()}.logs", format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 def planner(state: GraphState) -> GraphState:
 
-  logging_prefix = f"Planner [iteration {state['iterations']}"
+  logging_prefix = f"Planner [iteration {state['iterations']}]"
   logging.info(f"{logging_prefix} - Pipeline : {json.dumps(state.get("pipeline", []), indent=2)}")
 
   # extract any feedback from the previous validation round
@@ -31,8 +31,11 @@ def planner(state: GraphState) -> GraphState:
   feedback_text = json.dumps(feedback, ensure_ascii=False, indent=2) if feedback else None
 
   logging.info(f"{logging_prefix} - {'No feedback received from Validator' if not feedback else feedback_text}")
+  next_state = dict(state)
+  iteration = state.get("iterations")
 
-  if feedback:
+  # compute a plan at the start of the cycle or if there is any previous feedback
+  if iteration == 1 or feedback:
     # extract artifacts required by the planning agent
     task = state.get("task", None)
     dataset_name = state.get("dataset_name", None) 
@@ -46,7 +49,6 @@ def planner(state: GraphState) -> GraphState:
     })
 
     # extract the pipeline of flowetl functions generated and update the graph state
-    next_state = dict(state)
     next_state["pipeline"] = result['pipeline']
     next_state["flowetl_schema"] = result['flowetl_schema']
 
@@ -59,7 +61,7 @@ def planner(state: GraphState) -> GraphState:
 
 def validator(state : GraphState) -> GraphState:
 
-  logging_prefix = f"Validator [iteration {state['iterations']}"
+  logging_prefix = f"Validator [iteration {state['iterations']}]"
 
   # extract required artifacts for validation from previous state
   task = state.get("task", None)
@@ -95,16 +97,13 @@ def router(state: GraphState) -> Literal["ERROR", "DONE", "FAIL"]:
   validation = state.get("validation", {})
   iters = state.get("iterations", 0)
 
-  if len(validation) > 0:
-    if iters <= MAX_RETRIES:
-      # allow 3 iterations before failing the graph 
-      return "CONTINUE"
-    else:
-      # graph run out of iterations to compute a valid plan
-      return "END"
-    
-  # plan is validated
-  return "END"
+  if len(validation) > 0 and iters <= MAX_RETRIES:
+    # allow 3 iterations before failing the graph 
+    return "CONTINUE"
+  else:
+    # graph run out of iterations to compute a valid plan or the plan is valid
+    return "END"
+  
 
 def build_graph():
   graph = StateGraph(GraphState)
