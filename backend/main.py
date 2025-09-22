@@ -267,7 +267,7 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
 
     try:
       # apply the pipeline onto the abstracted dataset
-      abstraction, errors = apply_pipeline(abstraction, flowetl_schema, pipeline)
+      abstraction, errors = apply_pipeline(abstraction, flowetl_schema, pipeline, logger)
     except Exception as e:
       logger.error(f"{logging_prefix} - Error encountered while applying pipeline: {str(e)}")
       raise Exception(f"{logging_prefix} - Error encountered while applying pipeline: {str(e)}")

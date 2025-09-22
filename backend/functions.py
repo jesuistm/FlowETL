@@ -3,28 +3,41 @@ import pandas as pd
 from typing import Any, Dict, List, Union, Tuple
 from sklearn.ensemble import IsolationForest
 import logging 
+import json
 
-
-def compute_missing_values_count(abstraction: pd.DataFrame, columns_config: Dict[str, Any]) -> Dict[str, float]:
+def compute_missing_values_count(abstraction: pd.DataFrame, columns_config: Dict[str, Any], logger) -> Dict[str, float]:
     """
     Compute and return the count of missing values for each column specified in the `columns_config` dictionary. 
     Result follows a format like { column name : count of missing values }
     """
-    return {
+    logger_prefix = "Util [compute missing values count]"
+    logger.info(f"{logger_prefix} - Entered function")
+
+    artifact = {
         column : sum(abstraction[column].isna() | abstraction[column].isin(config.get('detect', [np.nan, ""]))) 
         for column, config in columns_config.items()
     }
 
+    logger.info(f"{logger_prefix} - Relevant artifact(s) : {json.dumps(artifact, indent=2)}. Exiting function")
+    return artifact
 
-def compute_outlier_values_count(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str], columns_config: Dict[str, Any]) -> Dict[str, float]:
+
+def compute_outlier_values_count(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str], columns_config: Dict[str, Any], logger) -> Dict[str, float]:
     """
     Compute and return the count of outliers for each column specified in the `columns_config` dictionary
     Result follows a format like { column name : count of outlier values }
     """
-    return { 
-        column : sum(_detect_outliers(abstraction[column], config.get('normal_values', 'auto'), flowetl_schema.get(column, 'Complex'))) 
+
+    logger_prefix = "Util [compute outlier values count]"
+    logger.info(f"{logger_prefix} - Entered function")
+
+    artifact = { 
+        column : sum(_detect_outliers(abstraction[column], config.get('normal_values', 'auto'), flowetl_schema.get(column, 'Complex'), logger)) 
         for column, config in columns_config.items()
     }
+
+    logger.info(f"{logger_prefix} - Relevant artifact(s) : {json.dumps(artifact, indent=2)}. Exiting function")
+    return artifact
 
     
 def compute_data_quality(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str],pipeline: List[Any], logger) -> Dict[str, str]:
@@ -36,7 +49,8 @@ def compute_data_quality(abstraction: pd.DataFrame, flowetl_schema: Dict[str, st
     - Column-specific information : flowetl type, % of missing values, % of outliers/anomalies
     """
 
-    logger.info("Hello from compute_data_quality")
+    logger_prefix = "Util [compute data quality]"
+    logger.info(f"{logger_prefix} - Entered function")
 
     report = { 
         'dimensions' : [abstraction.shape[0], abstraction.shape[1]], # number of rows, number of columns 
@@ -55,23 +69,25 @@ def compute_data_quality(abstraction: pd.DataFrame, flowetl_schema: Dict[str, st
 
         # extract configuration
         node_type = node.get('node_type', None)
+        node_id = node.get('id', None)
         columns = node.get('columns', None)
+
+        logger.info(f"{logger_prefix} - Computing data quality information for node with id {node_id} and type {node_type}")
 
         if node_type == "MissingValues":
             # need to return an object like { col1 : count of missing values, col2 : count of missing values, etc } 
             # to compute the total number of missing cells, simply sum all the values in the response
-            result = compute_missing_values_count(abstraction, columns)
+            result = compute_missing_values_count(abstraction, columns, logger)
             missing_values_count = sum(list(result.values()))
 
             # convert each count in the results.values to a percentage of the number of rows in the abstraction
             result = { key : round((value/abstraction.shape[0]) * 100,2) for key, value in result.items() }
-
             report['column_specific']['missing'] = result                                                               
 
         if node_type == "OutliersAndAnomalies":
             # similarly, here we must return an object like { col : count of outliers }
             # to compute thr total number of missing cells, sum the values in the response
-            result = compute_outlier_values_count(abstraction, flowetl_schema, columns)
+            result = compute_outlier_values_count(abstraction, flowetl_schema, columns, logger)
             outlier_values_count = sum(list(result.values()))
 
             # convert each count in the results.values to a percentage of the number of rows in the abstraction
@@ -85,14 +101,18 @@ def compute_data_quality(abstraction: pd.DataFrame, flowetl_schema: Dict[str, st
     # compute the percentage of outlier values in the dataframe
     report['outlier_values_percent'] = round((outlier_values_count/abstraction.size) * 100, 2)
 
+    logger.info(f"{logger_prefix} - Relevant artifact(s) : {json.dumps(report, indent=2)}. Exiting function")
     return report
 
 
-def apply_pipeline(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str],pipeline: List[Any]) -> Tuple[pd.DataFrame, List[Exception]]:
+def apply_pipeline(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str],pipeline: List[Any], logger) -> Tuple[pd.DataFrame, List[Exception]]:
     """
     Apply the pipeline of flowetl functions to the input abstraction.
     Collect any exceptions and return them alongside the result.
     """
+
+    logger_prefix = "Util [apply pipeline]"
+    logger.info(f"{logger_prefix} - Entered function")
 
     exceptions: List[Exception] = []
 
@@ -108,17 +128,17 @@ def apply_pipeline(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str],pip
             drop_source = node.get('drop_source', None)
             condition = node.get('condition', None)
 
-            logging.info(f"processing node with ID : {node_id}")
+            logger.info(f"{logger_prefix} - Processing node with id : {node_id}")
 
             # route to appropriate function
             if node_type == "MissingValues":
-                abstraction = missing_values(columns=columns, abstraction=abstraction, features_schema=flowetl_schema)
+                abstraction = missing_values(columns=columns, abstraction=abstraction, features_schema=flowetl_schema, logger=logger)
 
             elif node_type == "Duplicates":
-                abstraction = duplicate_instances(abstraction=abstraction)
+                abstraction = duplicate_instances(abstraction=abstraction, logger=logger)
 
             elif node_type == "OutliersAndAnomalies":
-                abstraction = outliers_anomalies(columns=columns, abstraction=abstraction, features_schema=flowetl_schema)
+                abstraction = outliers_anomalies(columns=columns, abstraction=abstraction, features_schema=flowetl_schema, logger=logger)
 
             elif node_type == "DeriveColumn":
                 abstraction = derive_column(
@@ -127,23 +147,24 @@ def apply_pipeline(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str],pip
                     target=target,
                     function=function,
                     drop_source=drop_source,
+                    logger=logger
                 )
 
             elif node_type == "DropRow":
-                abstraction = drop_rows(abstraction=abstraction, condition=condition)
+                abstraction = drop_rows(abstraction=abstraction, condition=condition, logger=logger)
 
-            logging.info(f"successfully applied the node")
+            logger.info(f"{logger_prefix} - Successfully applied node with id {node_id}")
 
         except Exception as e:
-            logging.error(f"Error in node {node.get('node_id', 'unknown')}: {e}")
+            logger.error(f"{logger_prefix} - Error in node {node_id}. Exception collected within method. Exception details: {e}")
             exceptions.append(e)
             # continue to next node instead of failing
 
-    logging.info("pipeline processing finished")
+    logger.info(f"{logger_prefix} - Pipeline applied to abstraction. Exiting function")
     return abstraction, exceptions
     
 
-def drop_rows(abstraction: pd.DataFrame, condition: str) -> pd.DataFrame:
+def drop_rows(abstraction: pd.DataFrame, condition: str, logger) -> pd.DataFrame:
     """
     Drop all rows within the abstraction that meet the input condition
 
@@ -151,16 +172,44 @@ def drop_rows(abstraction: pd.DataFrame, condition: str) -> pd.DataFrame:
     - `abstraction` : Pandas dataframe to be processed by this function
     - `condition` : Pandas function which takes in a dataframe's row and returns a boolean value
     """
+
+    logging_prefix = "Util [drop rows]"
+    logger.info(f"{logging_prefix} - Entered function")
+
     abstraction = abstraction.copy()
     
-    func = eval(condition) 
-    # compute boolean mask over the abstraction
-    mask = func(abstraction)
+    try:
+        logger.info(f"{logging_prefix} - Converting artifact 'drop row mask' into runnable function")
+        func = eval(condition) 
+        # compute boolean mask over the abstraction
+        logger.info(f"{logging_prefix} - Conversion succesful. Computing boolean mask over whole dataset")
+        mask = func(abstraction) # booolean mask
+    except Exception as e:
+      logger.error(f"{logging_prefix} - Error occured while converting artifact 'drop row mask' into runnable function")
+      raise Exception("Error occured while converting artifact 'drop row mask' into runnable function")
+
     # drop rows where the mask is True
-    return abstraction[~mask]
+    processed_abstraction = abstraction[~mask]
+    logger.info(f"{logging_prefix} - Removed rows from dataset using boolean mask.Exiting function")
+
+    return processed_abstraction
+
+
+def duplicate_instances(abstraction : pd.DataFrame, logger) -> pd.DataFrame:
+    """
+    Removes duplicated rows from the abstraction, leveraging Pandas' built-in `drop_duplicates` method
+    **Parameters**
+    - `abstraction` : Pandas dataframe to be processed by this function
+    """
+    
+    logging_prefix = "Util [drop duplicated instances]"
+    logger.info(f"{logging_prefix} - Entered function. Removing all duplicated rows from dataset")
+    processed_abstraction = abstraction.drop_duplicates()
+    logger.info(f"{logging_prefix} - Removal succesfull. Exiting function")
+    return processed_abstraction
 
     
-def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, features_schema : Dict[str, str]) -> pd.DataFrame:
+def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, features_schema : Dict[str, str], logger) -> pd.DataFrame:
     """
     Handle missing values following the configuration specified within the plan
     
@@ -193,7 +242,8 @@ def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, feature
     - `backward_fill`: Backward fill missing values
     """
 
-    logging.info("entering missing_values handler")
+    logging_prefix = "Util [missing values handler]"
+    logger.info(f"{logging_prefix} - Entering function")
 
     # create a copy to avoid modifying the original dataframe
     abstraction = abstraction.copy()
@@ -205,7 +255,7 @@ def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, feature
         
         # skip if column was already dropped
         if column not in abstraction.columns:
-            logging.warning(f"column '{column}' not in abstraction, skipped.")
+            logger.warning(f"{logging_prefix} - Column '{column}' not in dataset, skipped.")
             continue
         
         # attempt to get the user-specified missing values for this column, otherwise 
@@ -221,99 +271,91 @@ def missing_values(columns : Dict[str, Any], abstraction : pd.DataFrame, feature
         # read the user value for imputation if provided
         user_value = config.get('user_value', 'MISSINGVALUE')
 
-        logging.info(f"processing column - '{column}' | strategy - '{strategy}' | inferred column type - '{inferred_type}'")
+        logger.info(f"{logging_prefix} - Processing column '{column}' using strategy '{strategy}' and inferred column type of '{inferred_type}'")
 
         # create mask for missing values in this column
         # we use both isna and isin to handle the problem where "np.nan != np.nan" in Pandas
         missing_mask = abstraction[column].isna() | abstraction[column].isin(detectables)
-        
+        logger.info(f"{logging_prefix} - Compute missing values mask using user-specified detecable missing values")
+
         # handle the missing value based on the strategy
         if strategy == 'drop_row':
             abstraction = abstraction.drop(abstraction[missing_mask].index)
-            logging.info(f"dropped {missing_mask.sum()} rows")
+            logger.info(f"{logging_prefix} - Dropped {missing_mask.sum()} rows from dataset")
 
         # check whether the current column is composed mainly of missing values, defined in the 'detectables' list
         elif strategy == 'drop_column' and ((abstraction[column].isna() | abstraction[column].isin(detectables)).sum() > len(abstraction[column]) / 2):
             # mark column for removal
             columns_to_drop.append(column)
-            logging.info(f"marked column '{column}' for removal - 50%+ missing values")
+            logger.info(f"{logging_prefix} - Marked column '{column}' for removal due to 50%+ missing values")
 
         elif strategy == 'impute_user':
             abstraction.loc[missing_mask, column] = user_value
-            logging.info(f"imputed column '{column}' using user-value '{user_value}")
+            logger.info(f"{logging_prefix} - Imputed column '{column}' using user-value '{user_value}")
 
         elif strategy == 'impute_auto':
             # automatically impute missing values based on the column type inferred by flowetl
             if inferred_type == 'Number':
                 abstraction.loc[missing_mask, column] = 0
-                logging.info(f"auto-imputed '{column}' with 0")
+                logger.info(f"{logging_prefix} - Auto-imputed '{column}' with 0")
                 continue
 
             elif inferred_type == 'String':
                 abstraction.loc[missing_mask, column] = "N/A"
-                logging.info(f"auto-imputed '{column}' with 'N/A'")
+                logger.info(f"{logging_prefix} - Auto-imputed '{column}' with 'N/A'")
                 continue
 
             elif inferred_type == 'Date':
                 abstraction.loc[missing_mask, column] = "1/1/2000"
-                logging.info(f"auto-imputed '{column}' with '1/1/2000'")
+                logger.info(f"{logging_prefix} - Auto-imputed '{column}' with '1/1/2000'")
                 continue
 
             elif inferred_type == 'Boolean':
                 if not abstraction[column].mode().empty:
                     mode_value = abstraction[column].mode()[0]
                     abstraction.loc[missing_mask, column] = mode_value
-                    logging.info(f"auto-imputed '{column}' with mode '{mode_value}'")
+                    logger.info(f"{logging_prefix} - Auto-imputed '{column}' with mode '{mode_value}'")
                 continue
 
             elif inferred_type == 'Complex':
                 abstraction.loc[missing_mask, column] = "MISSINGVALUE"
-                logging.info(f"auto-imputed '{column}' with placeholder 'MISSINGVALUE'")
+                logger.info(f"{logging_prefix} - Auto-imputed '{column}' with placeholder 'MISSINGVALUE'")
                 continue
 
         elif strategy == 'mean':
             mean_value = abstraction[column].mean()
             abstraction.loc[missing_mask, column] = mean_value
-            logging.info(f"imputed '{column}' with mean={mean_value}")
+            logger.info(f"{logging_prefix} - Imputed '{column}' with mean value of {mean_value}")
 
         elif strategy == 'median':
             median_value = abstraction[column].median()
             abstraction.loc[missing_mask, column] = median_value
-            logging.info(f"imputed '{column}' with median={median_value}")
+            logger.info(f"{logging_prefix} - Imputed '{column}' with median value of {median_value}")
 
         elif strategy == 'mode':
             if not abstraction[column].mode().empty:
                 mode_value = abstraction[column].mode()[0]
                 abstraction.loc[missing_mask, column] = mode_value
-                logging.info(f"imputed '{column}' with mode={mode_value}")
+                logger.info(f"{logging_prefix} - Imputed '{column}' with mode value of {mode_value}")
 
         elif strategy == 'forward_fill':
             abstraction[column] = abstraction[column].ffill()
-            logging.info(f"applied forward fill on '{column}'")
+            logger.info(f"{logging_prefix} - Applied forward fill on '{column}'")
 
         elif strategy == 'backward_fill':
             abstraction[column] = abstraction[column].bfill()
-            logging.info(f"applied backward fill on '{column}'")
+            logger.info(f"{logging_prefix} - Applied backward fill on '{column}'")
 
     # drop columns that were marked for removal
     if columns_to_drop:
         abstraction = abstraction.drop(columns=columns_to_drop)
-        logging.info(f"dropped columns {columns_to_drop}")
+        logger.info(f"{logging_prefix} - Dropped columns '{json.dumps(columns_to_drop)} from dataset")
 
-    logging.info("exiting missing_values")
+    logger.info(f"{logging_prefix} - Exiting function")
     return abstraction
 
 
-def duplicate_instances(abstraction : pd.DataFrame) -> pd.DataFrame:
-    """
-    Removes duplicated rows from the abstraction, leveraging Pandas' built-in `drop_duplicates` method
-    **Parameters**
-    - `abstraction` : Pandas dataframe to be processed by this function
-    """
-    return abstraction.drop_duplicates()
-
-
-def outliers_anomalies(columns : Dict[str, Any], abstraction : pd.DataFrame, features_schema : Dict[str, str]) -> pd.DataFrame:
+def outliers_anomalies(columns : Dict[str, Any], abstraction : pd.DataFrame, features_schema : Dict[str, str], logger) -> pd.DataFrame:
     """
     Detects and handles outliers and anomalies with column-specific strategies.
 
@@ -347,11 +389,14 @@ def outliers_anomalies(columns : Dict[str, Any], abstraction : pd.DataFrame, fea
     - `mode`: Replace with column's statistical mode
     """
 
+    logging_prefix = "Util [outlier and anomaly values handler]"
+    logger.info(f"{logging_prefix} - Entering function")
+
     # create a copy to avoid modifying the original dataframe
     abstraction = abstraction.copy()
 
     # collect all rows to drop (for columns using 'drop' strategy)
-    rows_to_drop = set()
+    rows_to_drop = set() # this stores the indices
 
     for column, config in columns.items():
 
@@ -368,8 +413,11 @@ def outliers_anomalies(columns : Dict[str, Any], abstraction : pd.DataFrame, fea
         # get the user value to be used for user-defined imputation of outliers
         user_value = config.get('user_value', 'OUTLIER_REPLACED')
 
+        logger.info(f"{logging_prefix} - Handing outliers over column '{column}' of type '{inferred_type}' using strategy '{strategy}' and normal values '{json.dumps(normal_values)}'")
+
         # create mask for outliers/anomalies in this column
         outlier_mask = _detect_outliers(abstraction[column], normal_values, inferred_type)
+        logger.info(f"{logging_prefix} - Computed outlier mask over column '{column}' using normal values '{json.dumps(normal_values)}'")
 
         # handle outliers based on strategy
         if strategy == 'drop':
@@ -427,11 +475,13 @@ def outliers_anomalies(columns : Dict[str, Any], abstraction : pd.DataFrame, fea
     # drop all collected rows at once (if any columns used 'drop' strategy)
     if rows_to_drop:
         abstraction = abstraction.drop(list(rows_to_drop))
+        logging.info(f"{logging_prefix} - Dropped all rows containing an outlier")
     
+    logger.info(f"{logging_prefix} - Exiting function")
     return abstraction
 
 
-def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target : Union[str, List], function : str, drop_source : bool) -> pd.DataFrame:
+def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target : Union[str, List], function : str, drop_source : bool, logger) -> pd.DataFrame:
     """
     Handle all column operations including creation, transformation, merging, splitting, renaming, and dropping.
 
@@ -482,21 +532,32 @@ def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target 
     - Date extraction: `lambda x: pd.to_datetime(x).year`
     - Splitting: `lambda x: x.split(',')`
     """
+
+    logging_prefix = "Util [derive column]"
+    logger.info(f"{logging_prefix} - Entering function")
     
     # create a copy to avoid modifying the original dataframe
     abstraction = abstraction.copy()
     
     # operation 1: merge columns
     if isinstance(source, list) and isinstance(target, str):
+        logging.info(f"{logging_prefix} - Performing merge operation. Source : {json.dumps(source)} -> Target : {target}")
         # apply function row-wise for merging
         abstraction[target] = abstraction.apply(eval(function), axis=1)
+
         if drop_source:
             # drop source columns if specified
             abstraction = abstraction.drop(columns=source)
+            logging.info(f"{logging_prefix} - Source columns dropped")
+
+        logging.info(f"{logging_prefix} - Merge operation complete.")
         return abstraction
 
     # operation 2 : split columns 
     elif isinstance(source, str) and isinstance(target, list):
+
+        logging.info(f"{logging_prefix} - Performing split operation. Source : {source} -> Target : {json.dumps(target)}")
+
         # apply function and split result into multiple columns
         split_data = abstraction[source].apply(eval(function))
         
@@ -504,9 +565,11 @@ def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target 
         if hasattr(split_data.iloc[0], '__iter__') and not isinstance(split_data.iloc[0], str):
             # if function returns iterable (like list from split)
             split_df = pd.DataFrame(split_data.tolist(), index=abstraction.index)
+
             # assign to target columns
             for i, col_name in enumerate(target):
                 abstraction[col_name] = split_df.iloc[:, i] if i < split_df.shape[1] else None
+
         else:
             # if function doesn't return iterable, assign same value to all targets
             for col_name in target:
@@ -514,15 +577,22 @@ def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target 
     
         if drop_source:
             abstraction = abstraction.drop(columns=[source])
+            logging.info(f"{logging_prefix} - Source columns dropped")
+        
+        logging.info(f"{logging_prefix} - Split operation complete")
         return abstraction
 
     # operation 5 : rename column 
     elif function is None and isinstance(source, str) and isinstance(target, str) and source != target:
+        logging.info(f"{logging_prefix} - Performing rename operation. Source : {source} -> Target : {target}")
         abstraction = abstraction.rename(columns={source: target})
+        logging.info(f"{logging_prefix} - Rename operation complete")
         return abstraction
     
     # operations 3 & 4 : create & transform columns 
     elif isinstance(source, str) and isinstance(target, str):
+        logging.info(f"{logging_prefix} - Performing creation or transform operation. Source : {json.dumps(source)} -> Target : {json.dumps(target)}")
+
         # check if we're dealing with multiple source columns referenced in the function
         if '[' in str(function) and ']' in str(function):
             # we check if square brackets appear in lambda - meaning it must access multiple columns
@@ -533,13 +603,19 @@ def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target 
         if drop_source and source != target:
             # drop source if different from target and drop_source is True
             abstraction = abstraction.drop(columns=[source])
+            logging.info(f"{logging_prefix} - Source columns dropped")
+
+        logging.info(f"{logging_prefix} - Create or Transform operation complete.")
         return abstraction
     
     # operation 6 : drop column 
     elif drop_source and (target is None and function is None):
+        logging.info(f"{logging_prefix} - Performing drop column(s) operation. Source : {json.dumps(source)}")
         abstraction = abstraction.drop(columns=source)
+        logging.info(f"{logging_prefix} - Drop column(s) operation complete.")
         return abstraction
     
+    logger.info(f"{logging_prefix} - Exiting function")
     return abstraction
 
 
@@ -547,6 +623,7 @@ def _detect_outliers(series: pd.Series, normal_values: Union[str, List, Dict], i
     """
     Helper function to detect outliers based on `normal_values` definition
     
+
     **Parameters**
     - `series`: the pandas series to analyze
     - `normal_values`: definition of normal values (auto, list, dict, or condition string)
