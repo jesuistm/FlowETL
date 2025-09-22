@@ -102,10 +102,10 @@ def main():
 
                 else:
                     # FastAPI uses HTTPException by default, hence we assume an error returns the "detail" key
-                    st.error(response_body.get("detail"))
+                    st.error("Error occurred, please check the runtime logs.")
 
             except requests.exceptions.RequestException as e:
-                st.error(f"Request failed: {e}")
+                st.error("Error occurred, please check the runtime logs.")
     
     # data analysis tab
     with data_analyst:
@@ -147,7 +147,7 @@ def main():
 
                 else:
                     # FastAPI uses HTTPException by default, hence we assume an error returns the "detail" key
-                    st.error(response_body.get("detail"))
+                    st.error("Error occurred, please check the runtime logs.")
 
             except requests.exceptions.RequestException as e:
                 st.error(f"Request failed: {e}")

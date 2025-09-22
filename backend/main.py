@@ -3,6 +3,7 @@ import logging
 import uuid
 from typing import Any, Dict, Literal
 
+from pathlib import Path
 import matplotlib.pyplot as plt
 from datetime import datetime
 import numpy as np
@@ -42,6 +43,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     # generate request ID as timestamp down to seconds + first segment of a UUID (e.g., T2025-09-21-15-45-30_ID8b7f8c5f)
     # T_ refers to the request timestamp, ID refers to the request ID
     request_id = f"T{datetime.now():%Y-%m-%d-%H-%M-%S}_ID{str(uuid.uuid4()).split('-')[0]}"
+    # create the logs folder if it doesnt exist
+    Path("logs").mkdir(parents=True, exist_ok=True)
     logfile = f"logs/{request_id}.log"
 
     # create the file handler to allow write to log file
@@ -83,7 +86,7 @@ def planner(state: GraphState) -> GraphState:
   feedback = state.get("errors", None)
   feedback_text = json.dumps(feedback, ensure_ascii=False, indent=2) if feedback else None
 
-  logger.info(f"{logging_prefix}: feedback - {'No feedback received from Validator' if not feedback else feedback_text}")
+  logger.info(f"{logging_prefix} : feedback - {'No feedback received from Validator' if not feedback else feedback_text}")
   next_state = dict(state)
   iteration = state.get("iterations", -1)
 
@@ -156,12 +159,12 @@ def validator(state : GraphState) -> GraphState:
 
   # check if the validator spotted any validation, if none then we exit the graph
   if validation:
-    logger.warning(f"{logging_prefix} - Validation errors : {json.dumps(validation, indent=2)}")
+    logger.info(f"{logging_prefix} - Validation errors : {json.dumps(validation)}")
     iters = next_state.get("iterations")
     next_state["iterations"] = iters + 1
   else:
     # no validation returned by the validator, therefore the plan must be valid
-    logger.warning(f"{logging_prefix} - No validation errors encountered, plan is syntactically and logically valid.")
+    logger.info(f"{logging_prefix} - No validation errors encountered, plan is syntactically and logically valid.")
     next_state["is_valid"] = True
 
   logger.info(f"{logging_prefix} - Graph state updated. Exiting Validator.")
@@ -173,7 +176,7 @@ def router(state: GraphState) -> Literal["CONTINUE", "END"]:
   validation = state.get("validation", {})
   iters = state.get("iterations", 0)
 
-  if len(validation) > 0 and iters <= MAX_RETRIES:
+  if validation and iters <= MAX_RETRIES:
     # allow 3 iterations before failing the graph 
     return "CONTINUE"
   else:
@@ -273,7 +276,6 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
       raise Exception(f"{logging_prefix} - Error encountered while applying pipeline: {str(e)}")
    
     # TODO - make sure the errors (if any) are passed to the validation agent 
-    logger.error(f"{logging_prefix} - ############### IMPLEMENT THE TODO ##################, Errors encountered : {errors}")
 
     try:
       data_quality_report_after= compute_data_quality(abstraction, flowetl_schema, pipeline, logger)
