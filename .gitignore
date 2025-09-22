@@ -4,3 +4,4 @@ datasets/
 documentation/
 *.log 
 .env
+todo.md

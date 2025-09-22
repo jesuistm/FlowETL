@@ -156,7 +156,7 @@ def apply_pipeline(abstraction: pd.DataFrame, flowetl_schema: Dict[str, str],pip
             logger.info(f"{logger_prefix} - Successfully applied node with id {node_id}")
 
         except Exception as e:
-            logger.error(f"{logger_prefix} - Error in node {node_id}. Exception collected within method. Exception details: {e}")
+            logger.error(f"{logger_prefix} - Error in node {node_id}. Exception collected within method. Exception details: {str(e)}")
             exceptions.append(e)
             # continue to next node instead of failing
 
@@ -186,7 +186,7 @@ def drop_rows(abstraction: pd.DataFrame, condition: str, logger) -> pd.DataFrame
         mask = func(abstraction) # booolean mask
     except Exception as e:
       logger.error(f"{logging_prefix} - Error occured while converting artifact 'drop row mask' into runnable function")
-      raise Exception("Error occured while converting artifact 'drop row mask' into runnable function")
+      raise Exception(f"Error occured while converting artifact 'drop row mask' into runnable function. Details : {str(e)}")
 
     # drop rows where the mask is True
     processed_abstraction = abstraction[~mask]
@@ -542,8 +542,14 @@ def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target 
     # operation 1: merge columns
     if isinstance(source, list) and isinstance(target, str):
         logging.info(f"{logging_prefix} - Performing merge operation. Source : {json.dumps(source)} -> Target : {target}")
-        # apply function row-wise for merging
-        abstraction[target] = abstraction.apply(eval(function), axis=1)
+
+        try:
+            logging.info(f"{logging_prefix} - Performing merge operation. Source : {json.dumps(source)} -> Target : {target}")
+            # apply function row-wise for merging
+            abstraction[target] = abstraction.apply(eval(function), axis=1)
+        except Exception as e:
+            logger.error(f"{logging_prefix} - Error occured while applying function for row-wise merge")
+            raise Exception(f"Error occured while applying function for row-wise merge : {str(e)}")
 
         if drop_source:
             # drop source columns if specified
@@ -556,10 +562,14 @@ def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target 
     # operation 2 : split columns 
     elif isinstance(source, str) and isinstance(target, list):
 
-        logging.info(f"{logging_prefix} - Performing split operation. Source : {source} -> Target : {json.dumps(target)}")
+        try:
+            logging.info(f"{logging_prefix} - Performing split operation. Source : {source} -> Target : {json.dumps(target)}")
+            # apply function and split result into multiple columns
+            split_data = abstraction[source].apply(eval(function))
 
-        # apply function and split result into multiple columns
-        split_data = abstraction[source].apply(eval(function))
+        except Exception as e:
+            logger.error(f"{logging_prefix} - Error occured while applying function for split operation")
+            raise Exception(f"Error occured while applying function for split operation : {str(e)}")
         
         # handle the split results
         if hasattr(split_data.iloc[0], '__iter__') and not isinstance(split_data.iloc[0], str):
@@ -595,11 +605,21 @@ def derive_column(abstraction : pd.DataFrame, source : Union[str, List], target 
 
         # check if we're dealing with multiple source columns referenced in the function
         if '[' in str(function) and ']' in str(function):
-            # we check if square brackets appear in lambda - meaning it must access multiple columns
-            abstraction[target] = abstraction.apply(eval(function), axis=1)
+
+            try:
+                # we check if square brackets appear in lambda - meaning it must access multiple columns
+                abstraction[target] = abstraction.apply(eval(function), axis=1)
+            except Exception as e:
+                raise Exception(f"Error occured while applying function for create or transform operation : {str(e)}")
+            
         else:
-            # column-wise operation
-            abstraction[target] = abstraction[source].apply(eval(function))
+
+            try:
+                # column-wise operation
+                abstraction[target] = abstraction[source].apply(eval(function))
+            except Exception as e:
+                raise Exception(f"Error occured while applying function for create or transform operation : {str(e)}")
+
         if drop_source and source != target:
             # drop source if different from target and drop_source is True
             abstraction = abstraction.drop(columns=[source])
