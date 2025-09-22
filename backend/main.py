@@ -47,6 +47,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     Path("logs").mkdir(parents=True, exist_ok=True)
     logfile = f"logs/{request_id}.log"
 
+    # store the request_id in request.state so endpoints can access it
+    request.state.request_id = request_id
+    
     # create the file handler to allow write to log file
     file_handler = logging.FileHandler(logfile)
     file_handler.setLevel(logging.INFO)
@@ -197,14 +200,17 @@ def build_graph():
 
 
 @app.post("/transform")
-async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
+async def transform_data(request_payload: DataEngineerRequest, request: Request) -> Dict[str, Any]:
+
+  request_id = request.state.request_id  # retrieve it from the middleware
+
   try:
 
     logging_prefix = "Endpoint /transform"
 
     try:
       # reconstruct DataFrame from JSON
-      abstraction = pd.DataFrame(json.loads(request.abstraction))
+      abstraction = pd.DataFrame(json.loads(request_payload.abstraction))
     except Exception as e:
       logger.error(f"{logging_prefix} - Error encountered while ingesting full dataset: {str(e)}")
       raise Exception(f"{logging_prefix} - Error encountered while ingesting full dataset: {str(e)}")
@@ -222,8 +228,8 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
       raise Exception(f"{logging_prefix} - Error encountered while sampling dataset: {str(e)}")
 
     # extract the source dataset name and task description from request payload
-    dataset_name = request.dataset_name
-    task = request.task
+    dataset_name = request_payload.dataset_name
+    task = request_payload.task
 
     logger.info(f"{logging_prefix} - Extracted sample of size {sample_size} from dataset '{dataset_name}'")
     logger.info(f"{logging_prefix} - Received the following data engineering task : '{task}'")
@@ -288,7 +294,8 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
     return { 
       "processed_abstraction" : abstraction.to_json(orient='records'),
       "data-quality-before" : data_quality_report_before, 
-      "data-quality-after" : data_quality_report_after
+      "data-quality-after" : data_quality_report_after,
+      "request_id" : request_id # id used to map the response to the log file in the logs folder
     } 
 
   except Exception as e:
@@ -296,20 +303,21 @@ async def transform_data(request: DataEngineerRequest) -> Dict[str, Any]:
 
 
 @app.post("/analyze")
-def analyze_data(request : DataAnalystRequest) -> Dict[str, Any]:
+def analyze_data(request_payload : DataAnalystRequest, request : Request) -> Dict[str, Any]:
 
   logging_prefix = "Endpoint /analyze"
+  request_id = request.state.request_id
 
   try:
   
     try:
       # extract the abstracted dataset sample and the user query
-      abstraction = pd.DataFrame(json.loads(request.abstraction))
+      abstraction = pd.DataFrame(json.loads(request_payload.abstraction))
     except Exception as e:
       logger.error(f"{logging_prefix} - Error encountered while loading dataset: {str(e)}")
       raise Exception(f"{logging_prefix} - Error encountered while loading dataset: {str(e)}")
 
-    task = request.task
+    task = request_payload.task
 
     logger.info(f"{logging_prefix} - Received full dataset")
     logger.info(f"{logging_prefix} - Received the following data analysis task : '{task}'")
@@ -358,7 +366,8 @@ def analyze_data(request : DataAnalystRequest) -> Dict[str, Any]:
     # return the plotting function and the natural language summary to the frontend
     return { 
       "plot_code" : plot_code, 
-      "summary" : summary 
+      "summary" : summary,
+      "request_id" : request_id # used to map log file for this request to the request itself
     }
 
   except Exception as e:

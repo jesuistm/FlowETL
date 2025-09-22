@@ -1,7 +1,7 @@
 streamlit
 streamlit[charts]
-pandas
 fastapi[standard]
+pandas
 uvicorn
 requests
 numpy
@@ -11,5 +11,3 @@ langchain-community
 scikit-learn
 matplotlib
 langgraph
-
-selenium
