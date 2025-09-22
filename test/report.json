@@ -1,0 +1,51 @@
+{
+  "amazon_stock_data.csv": {
+    "easy": null,
+    "medium": null,
+    "difficult": null,
+    "unrelated": null,
+    "erroneous": null
+  },
+  "chemistry_field_data.csv": {
+    "easy": null,
+    "medium": null,
+    "difficult": null,
+    "unrelated": null,
+    "erroneous": null
+  },
+  "chess_games.csv": {
+    "easy": null,
+    "medium": null,
+    "difficult": null,
+    "unrelated": null,
+    "erroneous": null
+  },
+  "financial_compliance.csv": {
+    "easy": null,
+    "medium": null,
+    "difficult": null,
+    "unrelated": null,
+    "erroneous": null
+  },
+  "netflix_users.csv": {
+    "easy": null,
+    "medium": null,
+    "difficult": null,
+    "unrelated": null,
+    "erroneous": null
+  },
+  "pixar_films.csv": {
+    "easy": null,
+    "medium": null,
+    "difficult": null,
+    "unrelated": null,
+    "erroneous": null
+  },
+  "smartwatch_readings.csv": {
+    "easy": null,
+    "medium": null,
+    "difficult": null,
+    "unrelated": null,
+    "erroneous": null
+  }
+}
