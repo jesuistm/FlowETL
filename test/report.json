@@ -1,51 +1,156 @@
 {
   "amazon_stock_data.csv": {
-    "easy": null,
-    "medium": null,
-    "difficult": null,
-    "unrelated": null,
-    "erroneous": null
+    "easy": [
+      200,
+      "T2025-09-23-06-14-59_ID5c28441e"
+    ],
+    "medium": [
+      200,
+      "T2025-09-23-06-15-06_IDad1f04f1"
+    ],
+    "difficult": [
+      200,
+      "T2025-09-23-06-15-17_ID77a29241"
+    ],
+    "unrelated": [
+      200,
+      "T2025-09-23-06-15-38_ID37678569"
+    ],
+    "erroneous": [
+      400,
+      null
+    ]
   },
   "chemistry_field_data.csv": {
-    "easy": null,
-    "medium": null,
-    "difficult": null,
-    "unrelated": null,
-    "erroneous": null
+    "easy": [
+      200,
+      "T2025-09-23-06-15-59_IDbf731df7"
+    ],
+    "medium": [
+      200,
+      "T2025-09-23-06-16-30_ID5011ee11"
+    ],
+    "difficult": [
+      400,
+      null
+    ],
+    "unrelated": [
+      200,
+      "T2025-09-23-06-17-08_ID6c77abe0"
+    ],
+    "erroneous": [
+      200,
+      "T2025-09-23-06-17-41_ID105a7656"
+    ]
   },
   "chess_games.csv": {
-    "easy": null,
-    "medium": null,
-    "difficult": null,
-    "unrelated": null,
-    "erroneous": null
+    "easy": [
+      200,
+      "T2025-09-23-06-17-56_ID62393473"
+    ],
+    "medium": [
+      400,
+      null
+    ],
+    "difficult": [
+      200,
+      "T2025-09-23-06-18-22_IDdb176674"
+    ],
+    "unrelated": [
+      200,
+      "T2025-09-23-06-26-53_IDb0bae8ad"
+    ],
+    "erroneous": [
+      200,
+      "T2025-09-23-06-28-29_ID5e62ac9d"
+    ]
   },
   "financial_compliance.csv": {
-    "easy": null,
-    "medium": null,
-    "difficult": null,
-    "unrelated": null,
-    "erroneous": null
+    "easy": [
+      200,
+      "T2025-09-23-06-28-45_IDb9ab0ea2"
+    ],
+    "medium": [
+      200,
+      "T2025-09-23-06-28-52_IDab0b9bc7"
+    ],
+    "difficult": [
+      200,
+      "T2025-09-23-06-29-02_ID63a198b5"
+    ],
+    "unrelated": [
+      200,
+      "T2025-09-23-06-29-14_ID17d1008f"
+    ],
+    "erroneous": [
+      200,
+      "T2025-09-23-06-29-35_IDa051a18b"
+    ]
   },
   "netflix_users.csv": {
-    "easy": null,
-    "medium": null,
-    "difficult": null,
-    "unrelated": null,
-    "erroneous": null
+    "easy": [
+      200,
+      "T2025-09-23-06-29-42_IDb85f1890"
+    ],
+    "medium": [
+      200,
+      "T2025-09-23-06-29-49_IDa9a5a1ae"
+    ],
+    "difficult": [
+      200,
+      "T2025-09-23-06-29-56_ID355e5489"
+    ],
+    "unrelated": [
+      200,
+      "T2025-09-23-06-30-06_IDe5ac0f9e"
+    ],
+    "erroneous": [
+      200,
+      "T2025-09-23-06-30-19_IDe3f5afb4"
+    ]
   },
   "pixar_films.csv": {
-    "easy": null,
-    "medium": null,
-    "difficult": null,
-    "unrelated": null,
-    "erroneous": null
+    "easy": [
+      200,
+      "T2025-09-23-06-30-26_ID979371d2"
+    ],
+    "medium": [
+      200,
+      "T2025-09-23-06-30-34_ID8c95c4ac"
+    ],
+    "difficult": [
+      200,
+      "T2025-09-23-06-30-48_IDfcb0e51c"
+    ],
+    "unrelated": [
+      200,
+      "T2025-09-23-06-31-03_IDafde3053"
+    ],
+    "erroneous": [
+      200,
+      "T2025-09-23-06-31-25_ID2a83a9ca"
+    ]
   },
   "smartwatch_readings.csv": {
-    "easy": null,
-    "medium": null,
-    "difficult": null,
-    "unrelated": null,
-    "erroneous": null
+    "easy": [
+      200,
+      "T2025-09-23-06-31-36_IDcfd3050b"
+    ],
+    "medium": [
+      200,
+      "T2025-09-23-06-31-42_ID4f034886"
+    ],
+    "difficult": [
+      200,
+      "T2025-09-23-06-31-50_ID842dfd4c"
+    ],
+    "unrelated": [
+      400,
+      null
+    ],
+    "erroneous": [
+      200,
+      "T2025-09-23-06-32-20_ID90823164"
+    ]
   }
 }

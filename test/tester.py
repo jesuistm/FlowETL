@@ -46,14 +46,14 @@ if __name__ == "__main__":
                     )
 
                     response_body = response.json()
-                    status_code = response_body.get("status_code", None)
-                    request_id = response_body.get("response_id", None)
+                    status_code = response.status_code
+                    request_id = response_body.get("request_id", None)
 
                     if status_code == 200:
                         logging.info(f"Request successful. Check runtime log with ID : {request_id}")
 
-                    # save the response status code 
-                    results[dataset_name][difficulty] = status_code
+                    # save the response status code and the log file name for the request
+                    results[dataset_name][difficulty] = [status_code, request_id]
 
                 except requests.exceptions.RequestException as e:
                     logging.error("Error occurred while sending API request, testcase has been skipped.", exc_info=True)
