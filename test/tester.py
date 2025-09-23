@@ -54,9 +54,6 @@ def run_tests():
             except requests.exceptions.RequestException:
                 logging.error("Error occurred while sending API request, testcase has been skipped.", exc_info=True)
 
-            break
-        break
-
     with open("report.json", "w") as file:
         json.dump(results, file, indent=2)
 
