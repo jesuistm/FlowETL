@@ -366,4 +366,6 @@ def analyze_data(request_payload : DataAnalystRequest, request : Request) -> Dic
     }
 
   except Exception as e:
-    raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}", headers={"X-Request-ID": request.state.request_id})
+    raise HTTPException(
+      status_code=400, detail=f"Failed to process data: {str(e)}", headers={"X-Request-ID": request.state.request_id}
+    )
