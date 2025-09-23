@@ -47,17 +47,22 @@ if __name__ == "__main__":
 
                     response_body = response.json()
                     status_code = response.status_code
-                    request_id = response_body.get("request_id", None)
+                    request_id = response.headers.get("flowetl-request-id", None)
 
                     if status_code == 200:
                         logging.info(f"Request successful. Check runtime log with ID : {request_id}")
-
+                    else:
+                        logging.error(f"Request failed. Check runtime log with ID : {request_id}")
+                    
                     # save the response status code and the log file name for the request
                     results[dataset_name][difficulty] = [status_code, request_id]
-
+                        
                 except requests.exceptions.RequestException as e:
                     logging.error("Error occurred while sending API request, testcase has been skipped.", exc_info=True)
 
+                break
+            break
+        
         # save results
         with open("report.json", "w") as file:
             json.dump(results, file, indent=2)

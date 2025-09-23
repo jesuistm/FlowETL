@@ -49,7 +49,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
     # store the request_id in request.state so endpoints can access it
     request.state.request_id = request_id
-    
+
     # create the file handler to allow write to log file
     file_handler = logging.FileHandler(logfile)
     file_handler.setLevel(logging.INFO)
@@ -62,6 +62,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
     try:
       response = await call_next(request)
+      response.headers["flowetl-request-id"] = request_id
+
     finally:
       # detach & close file handler after request
       logger.removeHandler(file_handler)
@@ -202,10 +204,8 @@ def build_graph():
 @app.post("/transform")
 async def transform_data(request_payload: DataEngineerRequest, request: Request) -> Dict[str, Any]:
 
-  request_id = request.state.request_id  # retrieve it from the middleware
-
   try:
-
+  
     logging_prefix = "Endpoint /transform"
 
     try:
@@ -295,20 +295,16 @@ async def transform_data(request_payload: DataEngineerRequest, request: Request)
       "processed_abstraction" : abstraction.to_json(orient='records'),
       "data-quality-before" : data_quality_report_before, 
       "data-quality-after" : data_quality_report_after,
-      "request_id" : request_id # id used to map the response to the log file in the logs folder
     } 
 
   except Exception as e:
-    raise HTTPException(status_code=400, detail=f"failed to process data: {str(e)}")
-
+    raise HTTPException(status_code=400, detail=f"failed to process data: {str(e)}", headers={"X-Request-ID": request.state.request_id})
 
 @app.post("/analyze")
 def analyze_data(request_payload : DataAnalystRequest, request : Request) -> Dict[str, Any]:
 
-  logging_prefix = "Endpoint /analyze"
-  request_id = request.state.request_id
-
   try:
+    logging_prefix = "Endpoint /analyze"
   
     try:
       # extract the abstracted dataset sample and the user query
@@ -367,8 +363,7 @@ def analyze_data(request_payload : DataAnalystRequest, request : Request) -> Dic
     return { 
       "plot_code" : plot_code, 
       "summary" : summary,
-      "request_id" : request_id # used to map log file for this request to the request itself
     }
 
   except Exception as e:
-    raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}")
+    raise HTTPException(status_code=400, detail=f"Failed to process data: {str(e)}", headers={"X-Request-ID": request.state.request_id})
