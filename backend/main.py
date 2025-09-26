@@ -12,7 +12,6 @@ from fastapi import FastAPI, HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from langgraph.graph import END, START, StateGraph
-
 from backend.functions import *
 from backend.models import DataAnalystRequest, DataEngineerRequest, GraphState
 from backend.prompts import *
