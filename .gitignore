@@ -1,6 +1,4 @@
 venv/
 backend/__pycache__
-datasets/
-documentation/
 *.log 
 .env
