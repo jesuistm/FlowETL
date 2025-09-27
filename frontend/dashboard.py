@@ -4,45 +4,64 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import io
+import base64
 from datetime import datetime
 
 def initialize_session_state():
-    """Initialize session state variables for caching"""
+    """Initialize session state variables for caching. This bypasses the problem where 
+    streamlit resets the session state when new interactions are detected."""
+
     if 'processed_dataframe' not in st.session_state:
         st.session_state.processed_dataframe = None
+
     if 'query_history' not in st.session_state:
         st.session_state.query_history = []
+
     if 'dataset_name' not in st.session_state:
         st.session_state.dataset_name = None
+
     if 'dqr_before' not in st.session_state:
         st.session_state.dqr_before = None
+
     if 'dqr_after' not in st.session_state:
         st.session_state.dqr_after = None
 
+
 def clear_cache():
-    """Clear all cached data"""
+    """Clear session data. This action is triggered only on browser reloads or new requests to /transform"""
     st.session_state.processed_dataframe = None
     st.session_state.query_history = []
     st.session_state.dataset_name = None
     st.session_state.dqr_before = None
     st.session_state.dqr_after = None
 
+def fig_to_base64(fig):
+    """convert plotly figure (from data analysis response) into base64 image so that it can be embedded in chat response"""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight")
+    buf.seek(0)
+    img_b64 = base64.b64encode(buf.read()).decode("utf-8")
+    return f'<img src="data:image/png;base64,{img_b64}" style="max-width:100%; border-radius:10px; margin-top:10px;">'
+
+
 def render_query_response(query, response, error=False):
     """Render a query-response pair in chat-like format"""
-    # User query bubble
+
+    # user query bubble
     with st.container():
         col1, col2 = st.columns([1, 5])
         with col2:
             st.markdown(
                 f"""
                 <div style="background-color: #e3f2fd; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                    <strong>📝 Query:</strong><br>{query}
+                    <strong>Query</strong><br>{query}
                 </div>
                 """,
                 unsafe_allow_html=True
             )
     
-    # Response bubble
+    # data analysis response bubble
     with st.container():
         col1, col2 = st.columns([5, 1])
         with col1:
@@ -50,56 +69,51 @@ def render_query_response(query, response, error=False):
                 st.markdown(
                     f"""
                     <div style="background-color: #ffebee; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                        <strong>❌ Error:</strong><br>{response}
+                        <strong>❌ Error</strong><br>Could not fulfill your request.
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
             else:
+
+                content = ""
+
+                # add summary if available
+                if response.get('summary'):
+                    content += f"<p>{response['summary']}</p>"
+
+                # add plot if available
+                if response.get('plot'):
+                    content += fig_to_base64(response['plot'])
+
+                # Render everything inside HERE
                 st.markdown(
                     f"""
                     <div style="background-color: #f5f5f5; padding: 10px; border-radius: 10px; margin: 5px 0;">
-                        <strong>🤖 Response:</strong><br>
+                        <strong>Response</strong><br>{content}
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
-                # If there's a plot in the response, render it
-                if response.get('plot'):
-                    st.pyplot(response['plot'])
-                # Render the text summary
-                st.markdown(response.get('summary', ''))
 
 def main():
     """Run the frontend application"""
 
-    # Configure page settings
-    st.set_page_config(page_title="FlowETL", page_icon="🔁", initial_sidebar_state="collapsed")
+    # configure page settings
+    st.set_page_config(page_title="FlowETL", initial_sidebar_state="collapsed")
     
-    # Initialize session state
+    # initialize session state
     initialize_session_state()
     
     st.title("FlowETL")
     st.text("Transform and query your data using natural language")
 
-    # Data Engineering Section
-    st.header("📊 Data Preparation")
-    
-    # User inputs: dataset uploader and task description text area
-    input_dataset = st.file_uploader(
-        label="Upload your dataset", 
-        type=["csv"], 
-        accept_multiple_files=False, 
-        key="input_dataset"
-    )
-    
-    task_description = st.text_area(
-        label="Describe what you want FlowETL to do", 
-        key="task_description"
-    )
+    # user inputs: dataset uploader and task description text area
+    input_dataset = st.file_uploader(label="Upload your dataset", type=["csv"], accept_multiple_files=False, key="input_dataset")
+    task_description = st.text_area(label="Describe what you want FlowETL to do", key="task_description", placeholder="e.g., Fill all missing values, then handle all outliers in the 'salary' column...")
 
-    # Transform button
-    col1, col2, col3 = st.columns([1, 1, 3])
+    # transform button
+    col1, col2, col3 = st.columns([2, 1, 4]) 
     with col1:
         trigger_btn = st.button(
             label="Transform", 
@@ -108,12 +122,6 @@ def main():
             help="Ensure both the dataset and task description are provided", 
             type="primary"
         )
-    
-    with col2:
-        if st.session_state.processed_dataframe is not None:
-            if st.button("Clear Cache", key="clear_cache_btn", type="secondary"):
-                clear_cache()
-                st.rerun()
 
     if trigger_btn:
         # Clear previous cache when new transformation is triggered
@@ -126,7 +134,7 @@ def main():
         dataset_name = input_dataset.name
         st.session_state.dataset_name = dataset_name
 
-        with st.spinner("Processing your dataset..."):
+        with st.spinner("Preparing your dataset..."):
             try:
                 response = requests.post(
                     "http://localhost:8000/transform", 
@@ -161,9 +169,8 @@ def main():
     if st.session_state.processed_dataframe is not None:
         st.divider()
         
-        # Display transformed dataset
-        st.subheader("✅ Transformed Dataset")
-        
+        st.markdown("**🔍 Transformed Dataset**")
+
         col1, col2 = st.columns([3, 1])
         with col1:
             st.text(f"Preview of the transformed dataset: {st.session_state.dataset_name}")
@@ -171,7 +178,7 @@ def main():
             # Download button for processed dataframe
             CSV = st.session_state.processed_dataframe.to_csv(index=False).encode("utf-8")
             st.download_button(
-                label="📥 Download CSV", 
+                label="📥 Download", 
                 data=CSV, 
                 file_name=f"output_{st.session_state.dataset_name}", 
                 mime="text/csv"
@@ -182,40 +189,40 @@ def main():
         
         # Data Quality Reports Section
         st.divider()
-        st.subheader("📈 Data Quality Reports")
-        st.text("Data quality reports computed before and after transformations (with respect to your task requirements)")
+        st.markdown("**📊 Data Quality Reports**")
+        st.text("Data quality reports computed before and after processing your dataset, computed with respect to your task requirements.")
         
         col1, col2 = st.columns(2)
         
         with col1:
             if st.session_state.dqr_before:
                 st.markdown("**Pre-transformation Report**")
-                with st.expander("View Report", expanded=False):
-                    st.json(st.session_state.dqr_before)
                 st.download_button(
-                    label="📥 Download Pre-transform DQR",
+                    label="📥 Download",
                     data=json.dumps(st.session_state.dqr_before, indent=2),
                     file_name=f"dqr_before_{st.session_state.dataset_name}.json",
                     mime="application/json",
                     key="download_dqr_before"
                 )
+                with st.expander("View Report", expanded=False):
+                    st.json(st.session_state.dqr_before)
         
         with col2:
             if st.session_state.dqr_after:
                 st.markdown("**Post-transformation Report**")
-                with st.expander("View Report", expanded=False):
-                    st.json(st.session_state.dqr_after)
                 st.download_button(
-                    label="📥 Download Post-transform DQR",
+                    label="📥 Download",
                     data=json.dumps(st.session_state.dqr_after, indent=2),
                     file_name=f"dqr_after_{st.session_state.dataset_name}.json",
                     mime="application/json",
                     key="download_dqr_after"
                 )
+                with st.expander("View Report", expanded=False):
+                    st.json(st.session_state.dqr_after)
         
         # Data Analysis Section
         st.divider()
-        st.subheader("🔍 Data Analysis")
+        st.markdown("**🔍 Data Analysis**")
         st.text("Query your transformed dataset using natural language")
         
         # Query input
@@ -225,17 +232,17 @@ def main():
             placeholder="e.g., Show me the distribution of sales by region, or Calculate the average price per category"
         )
         
-        col1, col2 = st.columns([1, 5])
+        col1, col2, col3 = st.columns([2, 1, 4])
         with col1:
             analyze_btn = st.button(
-                label="Analyze", 
+                label="Query", 
                 key="trigger_analysis_btn", 
                 disabled=not query, 
                 type="primary"
             )
         
         if analyze_btn and query:
-            with st.spinner("Analyzing data..."):
+            with st.spinner("Processing your query..."):
                 try:
                     response = requests.post(
                         "http://localhost:8000/analyze", 
