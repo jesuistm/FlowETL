@@ -1,0 +1,14 @@
+langchain
+langchain-openai
+langchain-core
+langchain-ollama
+langchain-community
+langgraph
+
+fastapi[standard]
+uvicorn
+
+pandas
+numpy
+scikit-learn
+matplotlib

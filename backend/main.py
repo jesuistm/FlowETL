@@ -12,10 +12,10 @@ from fastapi import FastAPI, HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from langgraph.graph import END, START, StateGraph
-from backend.functions import *
-from backend.models import DataAnalystRequest, DataEngineerRequest, GraphState
-from backend.prompts import *
-from backend.chains_utils import *
+from functions import *
+from models import DataAnalystRequest, DataEngineerRequest, GraphState
+from prompts import *
+from chains_utils import *
 
 MAX_RETRIES = 3
 
@@ -42,9 +42,12 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     # generate request ID as timestamp down to seconds + first segment of a UUID (e.g., T2025-09-21-15-45-30_ID8b7f8c5f)
     # T_ refers to the request timestamp, ID refers to the request ID
     request_id = f"T{datetime.now():%Y-%m-%d-%H-%M-%S}_ID{str(uuid.uuid4()).split('-')[0]}"
+
     # create the logs folder if it doesnt exist
-    Path("logs").mkdir(parents=True, exist_ok=True)
-    logfile = f"logs/{request_id}.log"
+    LOGS_DIR = os.getenv("LOGS_DIR", "flowetl_logs")
+    Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
+
+    logfile = f"{LOGS_DIR}/{request_id}.log"
 
     # store the request_id in request.state so endpoints can access it
     request.state.request_id = request_id
@@ -84,7 +87,7 @@ def planner(state: GraphState) -> GraphState:
 
   logging_prefix = f"Planner [{state['iterations']}]"
   logger.info(f"{logging_prefix} - Entered Planner")
-  logger.info(f"{logging_prefix} - Input pipeline : {json.dumps(state.get("pipeline", None), indent=2)}")
+  logger.info(f"{logging_prefix} - Input pipeline : {json.dumps(state.get('pipeline', None), indent=2)}")
 
   # extract any feedback from the previous validation round
   feedback = state.get("errors", None)

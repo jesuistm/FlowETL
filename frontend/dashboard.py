@@ -7,6 +7,9 @@ import pandas as pd
 import io
 import base64
 from datetime import datetime
+import os
+
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 def initialize_session_state():
     """Initialize session state variables for caching. This bypasses the problem where 
@@ -137,7 +140,7 @@ def main():
         with st.spinner("Preparing your dataset..."):
             try:
                 response = requests.post(
-                    "http://localhost:8000/transform", 
+                    f"{BACKEND_URL}/transform", 
                     json={
                         "dataset_name": dataset_name,
                         "abstraction": abstraction.to_json(), 
@@ -245,7 +248,7 @@ def main():
             with st.spinner("Processing your query..."):
                 try:
                     response = requests.post(
-                        "http://localhost:8000/analyze", 
+                        f"{BACKEND_URL}/analyze", 
                         json={
                             "abstraction": st.session_state.processed_dataframe.to_json(), 
                             "task": query
