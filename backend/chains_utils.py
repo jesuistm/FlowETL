@@ -5,8 +5,9 @@ from langchain_ollama import OllamaLLM
 from models import Plan, Analysis, Feedback, TaskDescriptionTestcases
 from prompts import *
 
-# LLM CLIENT
 import os
+
+# LLM CLIENT
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 MODEL_NAME = os.getenv("MODEL_NAME", "deepseek-coder:6.7b")
