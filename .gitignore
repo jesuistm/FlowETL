@@ -2,3 +2,4 @@ venv/
 backend/__pycache__
 *.log 
 .env
+TODO.txt

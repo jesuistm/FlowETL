@@ -1,18 +1,15 @@
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_core.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_ollama import OllamaLLM
 
-from backend.models import Plan, Analysis, Feedback, TaskDescriptionTestcases
-from backend.prompts import *
-
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-key = os.environ["OPENAI_API_KEY"]
+from models import Plan, Analysis, Feedback, TaskDescriptionTestcases
+from prompts import *
 
 # LLM CLIENT
-llm = ChatOpenAI(api_key=key,  model="gpt-4.1",  temperature=0.0)
+import os
+
+ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+llm = OllamaLLM(base_url=ollama_base_url,model="qwen3-coder:30b",temperature=0.0)
 
 # LLM OUTPUT PARSERS 
 data_engineering_output_parser = JsonOutputParser(pydantic_object=Plan)

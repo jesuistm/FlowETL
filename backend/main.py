@@ -12,10 +12,10 @@ from fastapi import FastAPI, HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from langgraph.graph import END, START, StateGraph
-from backend.functions import *
-from backend.models import DataAnalystRequest, DataEngineerRequest, GraphState
-from backend.prompts import *
-from backend.chains_utils import *
+from functions import *
+from models import DataAnalystRequest, DataEngineerRequest, GraphState
+from prompts import *
+from chains_utils import *
 
 MAX_RETRIES = 3
 
@@ -84,7 +84,7 @@ def planner(state: GraphState) -> GraphState:
 
   logging_prefix = f"Planner [{state['iterations']}]"
   logger.info(f"{logging_prefix} - Entered Planner")
-  logger.info(f"{logging_prefix} - Input pipeline : {json.dumps(state.get("pipeline", None), indent=2)}")
+  logger.info(f"{logging_prefix} - Input pipeline : {json.dumps(state.get('pipeline', None), indent=2)}")
 
   # extract any feedback from the previous validation round
   feedback = state.get("errors", None)

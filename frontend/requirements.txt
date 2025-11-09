@@ -1,0 +1,8 @@
+streamlit
+streamlit[charts]
+requests
+
+pandas
+numpy
+scikit-learn
+matplotlib
