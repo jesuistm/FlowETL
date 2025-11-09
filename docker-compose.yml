@@ -1,0 +1,76 @@
+services:
+  # Ollama service - runs the LLM model server
+  ollama:
+    image: ollama/ollama:latest
+    container_name: flowetl-ollama
+    ports:
+      - "11434:11434"
+    # Create a named volume to persist downloaded models
+    volumes:
+      - ollama_models:/root/.ollama
+    # Health check to ensure Ollama is ready before other services start
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    networks:
+      - flowetl-network
+
+  # Model puller service - downloads the deepseek-coder model on the first run, otherwise uses cached model weights in ollama volume above
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: flowetl-model-puller
+    depends_on:
+      ollama:
+        condition: service_healthy
+    command: pull deepseek-coder:6.7b # pull deepseek-coder:6.7B
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    networks:
+      - flowetl-network
+    restart: "no"
+
+  backend:
+    image: mattiadiprofio/flowetl-backend:latest
+    container_name: flowetl-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - MODEL_NAME=deepseek-coder:6.7b
+      - LOGS_DIR=/app/logs
+    volumes:
+      # application runtime logs
+      - ./flowetl_logs:/app/logs
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+    networks:
+      - flowetl-network
+    restart: unless-stopped
+
+  frontend:
+    image: mattiadiprofio/flowetl-frontend:latest
+    container_name: flowetl-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - flowetl-network
+    restart: unless-stopped
+
+volumes:
+  ollama_models:
+    driver: local
+
+# define the docker network for inter-service communication
+networks:
+  flowetl-network:
+    driver: bridge

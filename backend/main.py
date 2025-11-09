@@ -42,9 +42,12 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     # generate request ID as timestamp down to seconds + first segment of a UUID (e.g., T2025-09-21-15-45-30_ID8b7f8c5f)
     # T_ refers to the request timestamp, ID refers to the request ID
     request_id = f"T{datetime.now():%Y-%m-%d-%H-%M-%S}_ID{str(uuid.uuid4()).split('-')[0]}"
+
     # create the logs folder if it doesnt exist
-    Path("logs").mkdir(parents=True, exist_ok=True)
-    logfile = f"logs/{request_id}.log"
+    LOGS_DIR = os.getenv("LOGS_DIR", "flowetl_logs")
+    Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
+
+    logfile = f"{LOGS_DIR}/{request_id}.log"
 
     # store the request_id in request.state so endpoints can access it
     request.state.request_id = request_id
