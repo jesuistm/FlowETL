@@ -208,7 +208,16 @@ Now that the project is running, simply upload a CSV file and type your data pre
 
 ![FlowETL User Interface Screenshot](media/UIScreenshot.png)
 
-### Future work
+### Future work and Contributing
+
+Contributions to FlowETL are welcomed! Here's how you can help:
+
+- Fork the repository and create a new branch for your feature or bugfix.
+- Implement your changes while following existing coding conventions and node specifications.
+- Test your changes using datasets in /test. Ensure pipelines are validated and reports are generated correctly.
+- Submit a Pull Request with a clear description of your changes and the motivation behind them.
+
+Future work could include:
 
 - **Log Analysis** - For each request, a log file is produced with the request ID. The idea is to store log files over time and analyse them in hope of extracting metrics, trends, and identify any bottlenecks over time. As a first step, the file handler for the logger should be configured to produce machine-readable logs in json format to allow for easier information extraction. Results could also be visualised in Grafana/Kibana dashboards.
 
