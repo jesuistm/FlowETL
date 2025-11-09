@@ -193,14 +193,13 @@ FlowETL defines its own internal data types for easier processing and edge-case 
 
 ### Running the Project
 
-Within the root project folder:
+This project can be run in two ways:
 
-1. Create a virtual environment and install the required libraries with `pip install -r requirements.txt`
-2. Running the project requires the user to supply their own [OpenAI API key](https://platform.openai.com/api-keys). Once obtained, it should be placed in a `.env` file as `OPENAI_API_KEY="<your-key>"`.
-3. To run the API backend, run the command `uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000`
-4. To run the Streamlit frontend, opena another terminal and run the command `streamlit run frontend/dashboard.py`. A browser window similar to the one show below should open automatically.
+1. **3rd party LLM server** - this version uses the OpenAI API for LLM inference. This option provides fast inference at cost of API credits and privacy over the datasets you upload to FlowETL. For this option, create a `.env` file and populate it with `OPENAI_API_KEY="<your-key>"`. Finally, run the `flowetl.sh` script within the parent folder of this project.
 
-Now that the project is running, simply upload a CSV file and type your data preparation requirements. If successful, the transformed dataset, data quality reports, and data analysis chatbot should render sequentially. You can download all artifacts generated. **NOTE** that the frontend will cache all artifacts until you refresh the browser or start a new Transform request.
+2. **Ollama LLM server** - this version uses a locally running LLM served via Ollama. This option provides various speed of interference depending on your hardware, but it's completely cost-free and fully private. To run this version of the project you just need the `docker-compose.yml` file. Once you have pulled this locally, run `docker-compose up` to pull the existing flowetl-frontend and flowetl-backend images from docker hub, and execute Ctrl + C and `docker-compose down` to stop the project.
+
+Now that the project is running, simply upload a CSV file and type your data preparation requirements. If successful, the transformed dataset, data quality reports, and data analysis chatbot should render sequentially. You can download all artifacts generated. **NOTE** that the frontend will cache all artifacts until you refresh the browser or start a new Transform request. All execution logs will be stored in the `flowetl/flowetl_logs` folder.
 
 **Project Files and Folders explained**
 
@@ -212,8 +211,6 @@ Now that the project is running, simply upload a CSV file and type your data pre
 ### Future work
 
 - **Log Analysis** - For each request, a log file is produced with the request ID. The idea is to store log files over time and analyse them in hope of extracting metrics, trends, and identify any bottlenecks over time. As a first step, the file handler for the logger should be configured to produce machine-readable logs in json format to allow for easier information extraction. Results could also be visualised in Grafana/Kibana dashboards.
-
-- **Privatise Data Processing** - Privatise the application by using an LLM provisioned through Ollama instead of the OpenAI API. This removes the need to buy tokens and allows for completely local data processing. Research into
 
 - **Support for JSON files** - Implement an abstraction and reverse-abstraction mechanism to convert JSON files to a structured dataset, allowing FlowETL to process them. The conversion method described in the original FlowETL [paper](https://www.arxiv.org/abs/2507.23118) could be a good starting point.
 
