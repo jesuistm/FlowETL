@@ -9,7 +9,8 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-key = os.environ["OPENAI_API_KEY"]
+#key = os.environ["OPENAI_API_KEY"]
+key = st.secrets["OPENAI_API_KEY"]
 
 # LLM CLIENT
 llm = ChatOpenAI(api_key=key,  model="gpt-4.1",  temperature=0.0)
